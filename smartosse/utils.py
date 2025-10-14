@@ -4,7 +4,8 @@ import subprocess
 import glob
 import matplotlib.pyplot as plt
 import os
-from xmitgcm.utils import *
+import xmitgcm.utils as xu
+import xarray as xr
 
 def write_float32(fout,fld):
     with open(fout, 'wb') as f:
@@ -175,13 +176,16 @@ def read_mds(fname, iternum=None, use_mmap=None, endian='>', shape=None,
 
     # get metadata
     try:
-        metadata = parse_meta_file(metafile)
+        metadata = xu.parse_meta_file(metafile)
         nrecs, shape, name, dtype, fldlist = \
-            _get_useful_info_from_meta_file(metafile)
+            xu._get_useful_info_from_meta_file(metafile)
         dtype = dtype.newbyteorder(endian)
     except IOError:
         # we can recover from not having a .meta file if dtype and shape have
         # been specified already
+        # MG, 10/2025: Note that this still assumes we have a filename ending
+        # in .data, hence the need for fake_mds (to accomodate e.g. .bin
+        # files with known llc structure)
         if shape is None:
             raise IOError("Cannot find the shape associated to %s in the \
                           metadata." % fname)
@@ -257,11 +261,11 @@ def read_mds(fname, iternum=None, use_mmap=None, endian='>', shape=None,
 
     # using fake_mds, can remove binary file .data extension but take
     # advantage of extra_metadata restructuring
- #   from pdb import set_trace;set_trace()
-    file_metadata['filename'] = file_metadata['filename'][:-5] if file_metadata['filename'].endswith('.data') else file_metadata['filename']
+    if fake_mds:
+        file_metadata['filename'] = file_metadata['filename'][:-5] if file_metadata['filename'].endswith('.data') else file_metadata['filename']
 
     # read all variables from file into the list d
-    d = read_all_variables(file_metadata['fldList'], file_metadata,
+    d = xu.read_all_variables(file_metadata['fldList'], file_metadata,
                            use_mmap=use_mmap, use_dask=use_dask,
                            chunks=chunks)
 
@@ -282,51 +286,7 @@ def read_mds(fname, iternum=None, use_mmap=None, endian='>', shape=None,
     # --------------- /LEGACY --------------------------
     return out
 
-
-def read_fake_mds(fname, dtype='>f4', shape=None, domain='aste', nx=None,
-                  use_dask=False, llc=True):
-    """
-    Generic reader for raw binary MITgcm-style files with mds and extra_metadata reshaping.
-
-    Parameters
-    ----------
-    fname : str
-        Full path to the raw binary file.
-    dtype : str or numpy.dtype
-        Data type of the file (default: '>f4').
-    shape : tuple, optional
-        Shape of the data (required if no .meta file exists).
-    domain : str
-        Domain name for get_extra_metadata (default: 'aste').
-    nx : int, optional
-        NX for extra metadata (required if llc reshaping is needed).
-    use_dask : bool
-        Whether to return dask arrays (default: False).
-    llc : bool
-        Apply ASTE/LLC reshaping logic (default: True).
-
-    Returns
-    -------
-    dict
-        Dictionary with variable name as key and NumPy array as value.
-    """
-    # Get extra metadata if needed
-    extra_meta = get_extra_metadata(domain=domain, nx=nx) if llc else None
-
-    # Read using xmitgcm
-    data = read_mds(
-        fname=fname,
-        shape=shape,
-        dtype=np.dtype(dtype),
-        endian='>',
-        use_dask=use_dask,
-        extra_metadata=extra_meta,
-        llc=llc
-    )
-
-    return data
-
-def aste_read_fake_mds(fname, nx=270, nz=None, dtype='>f4'):
+def aste_read_mds(fname, nx=270, nz=None, dtype='>f4', fake_mds=False, **read_mds_kwargs):
     """
     Read raw ASTE/MITgcm-style binary file and infer nz if not provided.
     
@@ -344,14 +304,27 @@ def aste_read_fake_mds(fname, nx=270, nz=None, dtype='>f4'):
     Returns
     -------
     dict
-        Dictionary from read_fake_mds with reshaped data
+        Dictionary from read_mds with reshaped data
     """
     ntiles = 5 # ASTE binaries have length 5*nx
     ntiles_xr = 6  # in xarray after padding, ASTE has 6 tiles
     ny = nx * ntiles   
     
     itemsize = np.dtype(dtype).itemsize
-    filesize = os.path.getsize(fname)  # size in bytes
+
+    # try to infer nz by file size, check if .data extension is needed
+    fname_check = fname
+    if not os.path.exists(fname_check):
+        # try adding .data
+        fname_check = fname + '.data'
+        if not os.path.exists(fname_check) and 'iternum' in read_mds_kwargs:
+            # try adding .{iternum:010d}.data
+            iternum = read_mds_kwargs['iternum']
+            fname_check = f"{fname}.{iternum:010d}.data"
+    if not os.path.exists(fname_check):
+        raise FileNotFoundError(f"File not found with any variant: {fname}, .data, or iternum extension")
+
+    filesize = os.path.getsize(fname_check)
     
     # infer nz if not provided 
     if nz is None:
@@ -363,42 +336,58 @@ def aste_read_fake_mds(fname, nx=270, nz=None, dtype='>f4'):
     
     shape = (nz, ny, nx) if nz > 1 else (ny, nx)
     
-    return read_fake_mds(fname, shape=shape, nx=nx)
+    # get extra_metadata if llc
+    extra_meta = xu.get_extra_metadata(domain='aste', nx=nx)
 
-def aste_da(fname, nx=270, nz=None, var_name=None, dims=None):
+    return read_mds(
+        fname=fname,
+        shape=shape,
+        dtype=np.dtype(dtype),
+        endian='>',
+        use_dask=False,
+        extra_metadata=extra_meta,
+        llc=True,
+        fake_mds=fake_mds,
+        **read_mds_kwargs,
+    )
+
+def aste_da(fname, nx=270, nz=None, var_name=None, dims=None, fake_mds=False, domain='aste', **read_mds_kwargs):
     """
-    Read an ASTE raw file and convert the dictionary output into an xarray DataArray.
+    Read an ASTE raw file and convert the output into an xarray DataArray.
 
     Parameters
     ----------
     fname : str
         Path to the raw binary file.
     nx : int
-        Size of the x/y grid (default 270).
-    nz : int
-        Number of vertical levels (default 0, i.e., 2D data).
+        Size of the x/y grid (default 270)
+    nz : int or None
+        Number of vertical levels; if None, infer from file size
     var_name : str, optional
-        Name of the variable for the DataArray. Defaults to dictionary key.
+        Name of the variable for the DataArray
     dims : tuple of str, optional
-        Names of the dimensions. By default: 
+        Names of the dimensions. Defaults:
             - 2D: ('tile', 'j', 'i')
             - 3D: ('k', 'tile', 'j', 'i')
+    fake_mds : bool
+        Whether to use fake_mds flag within modified read_mds
+    domain : str
+        Domain name for extra_metadata (if using fake_mds)
 
     Returns
     -------
-    dict
-        Dictionary mapping variable names to xarray.DataArray objects.
+    xarray.DataArray
+        The reshaped variable as a DataArray
     """
-    # Read the raw data
-    data_dict = aste_read_fake_mds(fname, nx=nx, nz=nz)
+    # Read data
+    data_dict = aste_read_mds(fname, nx=nx, nz=nz, fake_mds=fake_mds, **read_mds_kwargs)
 
-    # Expect only one variable
     if len(data_dict) != 1:
         raise ValueError(f"Expected a single variable, got {len(data_dict)} keys")
 
     key, arr = next(iter(data_dict.items()))
 
-    # Determine default dimension names if not provided
+    # Determine dimension names
     if dims is None:
         if arr.ndim == 3:
             dim_names = ('tile', 'j', 'i')
@@ -409,10 +398,5 @@ def aste_da(fname, nx=270, nz=None, var_name=None, dims=None):
     else:
         dim_names = dims
 
-    # Use provided variable name or dictionary key
-    name = var_name if var_name is not None else key
-
-    # Convert to DataArray
-    da = xr.DataArray(arr, dims=dim_names, name=name)
-
-    return da
+    name = var_name if var_name else key
+    return xr.DataArray(arr, dims=dim_names, name=name)
