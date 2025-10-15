@@ -119,8 +119,8 @@ def read_mds(fname, iternum=None, use_mmap=None, endian='>', shape=None,
         # we can recover from not having a .meta file if dtype and shape have
         # been specified already
         # MG, 10/2025: Note that this still assumes we have a filename ending
-        # in .data, hence the need for fake_mds (to accomodate e.g. .bin
-        # files with known llc structure)
+        # in .data, hence the need to accomodate suffixless files with
+        # known llc structure
         if shape is None:
             raise IOError("Cannot find the shape associated to %s in the \
                           metadata." % fname)
@@ -130,9 +130,9 @@ def read_mds(fname, iternum=None, use_mmap=None, endian='>', shape=None,
                           avoid this error." % fname)
         else:
             # add time dimensions
-            shape = (1,) + shape
-            shape = list(shape)
+            shape = (1,) + shape if len(shape) == 2 else shape
             name = os.path.basename(fname)
+            metadata = {'basename': name, 'shape': shape}
 
     # Determine dimensionality
     ndims = len(shape) - 1
@@ -190,7 +190,7 @@ def read_mds(fname, iternum=None, use_mmap=None, endian='>', shape=None,
     file_metadata['filename'] = file_metadata['filename'][:-5] if file_metadata['filename'].endswith('.data') else file_metadata['filename']
 
     # Read data
-    d = read_all_variables(
+    d = xu.read_all_variables(
         file_metadata['fldList'], file_metadata,
         use_mmap=use_mmap, use_dask=use_dask, chunks=chunks
     )
@@ -216,7 +216,7 @@ def read_mds_suffixless(fname, dtype='>f4', shape=None, domain='aste', nx=None,
         Data type of the binary file (default '>f4').
     shape : tuple, optional
         Shape of the data (required if no .meta file exists).
-    domain : {'aste', 'ecco', ...}, optional
+    domain : {'aste', 'llc', ...}, optional
         Domain name used to retrieve extra metadata via `get_extra_metadata`.
     nx : int, optional
         Horizontal grid dimension, required for LLC-style grids.
@@ -239,7 +239,7 @@ def read_mds_suffixless(fname, dtype='>f4', shape=None, domain='aste', nx=None,
       * ASTE or ECCO domain reshaping via `get_extra_metadata(domain, nx)`.
       * Inference of `nz` if not specified and file size is known.
     """
-    extra_meta = get_extra_metadata(domain=domain, nx=nx) if llc else None
+    extra_meta = xu.get_extra_metadata(domain=domain, nx=nx) if llc else None
 
     if shape is None and nx is not None:
         filesize = os.path.getsize(fname)
@@ -270,62 +270,90 @@ def read_region_bin(fname, domain='aste', nx=None, nz=None, var_name=None, dims=
     PARAMETERS
     ----------
     fname : str
-<<<<<<< HEAD
-        Path to the binary file
-    nx : int
-        Grid size (default 270)
-    nz : int or None
-        Vertical levels; if None, infer from file size
-    dtype : str or np.dtype
-        Data type (default '>f4')
-    
-    Returns
+        Path to the raw binary file (may lack `.data` suffix).
+    domain : {'aste', 'llc', ...}, optional
+        Model domain name. Used to determine facet layout and metadata.
+    nx : int, optional
+        X-dimension grid size for the regional grid (e.g., 270 for ASTE).
+    nz : int, optional
+        Number of vertical levels. If None, inferred from file size.
+    var_name : str, optional
+        Name to assign to the DataArray (default: variable name from file).
+    dims : tuple of str, optional
+        Custom dimension names. Defaults:
+            - 2D: ('tile', 'j', 'i')
+            - 3D: ('k', 'tile', 'j', 'i')
+
+    RETURNS
     -------
-    dict
-        Dictionary from read_mds with reshaped data
+    da : xarray.DataArray
+        DataArray representation of the binary file.
     """
-    ntiles = 5 # ASTE binaries have length 5*nx
-    ntiles_xr = 6  # in xarray after padding, ASTE has 6 tiles
-    ny = nx * ntiles   
-    
-    itemsize = np.dtype(dtype).itemsize
+    data_dict = read_mds_suffixless(fname, domain=domain, nx=nx, nz=nz)
+    if len(data_dict) != 1:
+        raise ValueError(f"Expected a single variable, got {len(data_dict)}")
 
-    # try to infer nz by file size, check if .data extension is needed
-    fname_check = fname
-    if not os.path.exists(fname_check):
-        # try adding .data
-        fname_check = fname + '.data'
-        if not os.path.exists(fname_check) and 'iternum' in read_mds_kwargs:
-            # try adding .{iternum:010d}.data
-            iternum = read_mds_kwargs['iternum']
-            fname_check = f"{fname}.{iternum:010d}.data"
-    if not os.path.exists(fname_check):
-        raise FileNotFoundError(f"File not found with any variant: {fname}, .data, or iternum extension")
+    key, arr = next(iter(data_dict.items()))
 
-    filesize = os.path.getsize(fname_check)
-    
-    # infer nz if not provided 
-    if nz is None:
-        total_elements = filesize // itemsize
-        nz = total_elements // (ntiles * nx * nx)
-        if total_elements % (ntiles * nx * nx) != 0:
-            raise ValueError(f"Cannot evenly reshape file {fname} into "
-                             f"(nz, tile, j, i) with nx={nx}, tiles={ntiles_xr}")
-    
-    shape = (nz, ny, nx) if nz > 1 else (ny, nx)
-    
-    # get extra_metadata if llc
-    extra_meta = xu.get_extra_metadata(domain='aste', nx=nx)
+    if dims is None:
+        if arr.ndim == 3:
+            dim_names = ('tile', 'j', 'i')
+        elif arr.ndim == 4:
+            dim_names = ('k', 'tile', 'j', 'i')
+        else:
+            raise ValueError(f"Unexpected array shape {arr.shape}")
+    else:
+        dim_names = dims
 
-    return read_mds(
-        fname=fname,
-        shape=shape,
-        dtype=np.dtype(dtype),
-        endian='>',
-        use_dask=False,
-        extra_metadata=extra_meta,
-        llc=True,
-        fake_mds=fake_mds,
-        **read_mds_kwargs,
-    )
+    name = var_name or key
+    return xr.DataArray(arr, dims=dim_names, name=name)
 
+
+def read_aste_bin(fname, nx=270, nz=None, var_name=None, dims=None):
+    """
+    Convenience wrapper for reading ASTE binary files as xarray.DataArray.
+
+    PARAMETERS
+    ----------
+    fname : str
+        Path to the ASTE binary file (may lack `.data` suffix).
+    nx : int, optional
+        ASTE horizontal grid size (default 270).
+    nz : int, optional
+        Number of vertical levels. If None, inferred from file size.
+    var_name : str, optional
+        Name for the DataArray.
+    dims : tuple of str, optional
+        Custom dimension names.
+
+    RETURNS
+    -------
+    da : xarray.DataArray
+        ASTE DataArray.
+    """
+    return read_region_bin(fname, domain='aste', nx=nx, nz=nz, var_name=var_name, dims=dims)
+
+
+def read_llc_bin(fname, nx=90, nz=None, var_name=None, dims=None):
+    """
+    Convenience wrapper for reading ECCO binary files as xarray.DataArray.
+
+    PARAMETERS
+    ----------
+    fname : str
+        Path to the ECCO binary file (may lack `.data` suffix).
+    nx : int, optional
+        ECCO grid size (default 90 for LLC90).
+    nz : int, optional
+        Number of vertical levels. If None, inferred from file size.
+    var_name : str, optional
+        Name for the DataArray.
+    dims : tuple of str, optional
+        Custom dimension names.
+
+    RETURNS
+    -------
+    da : xarray.DataArray
+        ECCO DataArray.
+    """
+    return read_region_bin(fname, domain='llc', nx=nx, nz=nz, var_name=var_name, dims=dims)
