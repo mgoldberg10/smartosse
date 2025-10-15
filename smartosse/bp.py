@@ -26,9 +26,8 @@ class BPReader:
 
     def _discover_bp_vars(self) -> List[str]:
         """
-        Scan iteration directories to find available BP variable files.
+        Scan iteration directories and find variables that exist in *all* iteration subdirectories.
         """
-        # Expected base variable names
         expected_vars = [
             "bpdatanom_raw",
             "bpdatanom_smooth",
@@ -36,31 +35,44 @@ class BPReader:
             "bpdifanom_smooth",
             self.m_bp_str,
         ]
-
-        found_vars = set()
-        missing_vars = []
-
-        # Just use first iteration directory for discovery
-        first_iter_dir = f"{self.run_dir_root}/iter{self.iternums[0]:04d}"
-        if not os.path.isdir(first_iter_dir):
-            raise FileNotFoundError(f"Iteration directory not found: {first_iter_dir}")
-
-        all_files = glob.glob(os.path.join(first_iter_dir, "*.data"))
-
+    
+        found_vars = []
+        missing_summary = {}
+    
+        # Check that iteration directories exist
+        missing_dirs = [it for it in self.iternums
+                        if not os.path.isdir(f"{self.run_dir_root}/iter{it:04d}")]
+        if missing_dirs:
+            raise FileNotFoundError(f"[BPReader] Missing iteration directories: {missing_dirs}")
+    
+        # For each variable, verify its file exists in *all* iteration directories
         for var in expected_vars:
-            pattern = re.compile(rf"{var}(\.\d{{10}})?\.data$")
-            match = any(pattern.search(os.path.basename(f)) for f in all_files)
-            if match:
-                found_vars.add(var)
-            else:
-                missing_vars.append(var)
-
-        # Report any missing expected files
-        if missing_vars:
-            print(f"[BPReader] Warning: Missing expected files for variables: {', '.join(missing_vars)}")
-
-        print(f"[BPReader] Found variables: {', '.join(sorted(found_vars))}")
-        return sorted(found_vars)
+            all_exist = True
+            for iternum in self.iternums:
+                iter_dir = f"{self.run_dir_root}/iter{iternum:04d}"
+                if var == self.m_bp_str:
+                    fname = os.path.join(iter_dir, f"{var}.{iternum:010d}.data")
+                else:
+                    fname = os.path.join(iter_dir, f"{var}.data")
+    
+                if not os.path.isfile(fname):
+                    all_exist = False
+                    missing_summary.setdefault(var, []).append(iternum)
+    
+            if all_exist:
+                found_vars.append(var)
+    
+        # Log missing vars
+        if missing_summary:
+            for var, iters in missing_summary.items():
+                iters_str = ", ".join(str(i) for i in iters)
+                print(f"[BPReader] Skipping '{var}': missing in iterations [{iters_str}]")
+    
+        if not found_vars:
+            print(f"[BPReader] Warning: No variable files found across all iterations.")
+    
+        print(f"[BPReader] Found variables (common to all iterations): {', '.join(found_vars)}")
+        return found_vars
 
     def __post_init__(self):
         self.m_bp_str = f"m_bp{self.ecco_frequency}"
@@ -78,7 +90,7 @@ class BPReader:
         self.compute_model_anom()
         self.read_weight()
 
-        if self.compute_cost:
+        if ('bpdifanom_raw' in self.ds.data_vars) and self.compute_cost:
             self.get_cost()
 
     def __repr__(self):
