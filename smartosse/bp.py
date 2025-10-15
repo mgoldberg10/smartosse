@@ -123,8 +123,8 @@ class BPReader:
                 run_dir = f'{self.run_dir_root}/iter{iternum:04d}/'
                 fname = f'{run_dir}/{var_name_literal}'
 
-                # Read data using `utils.aste_da`
-                da = aste_da(fname, var_name=var_name, fake_mds=True)
+                # Read data using `utils.read_aste_bin`
+                da = read_aste_bin(fname, var_name=var_name)
 
                 # Append the DataArray to the list
                 data_list.append(da)
@@ -187,7 +187,7 @@ class BPReader:
             raise Exception(f"An error occurred while searching for the gencost_errfile: {e}")
 
         # Assume weight is a 2D aste field. We will spoof its .data/.meta files using XC
-        sigma = aste_da(errfile, var_name='sigma', fake_mds=True)
+        sigma = read_aste_bin(errfile, var_name='sigma')
         self.ds['sigma'] = sigma.where(sigma != -9999.).squeeze()
         self.ds['weight'] = self.ds.sigma.where((self.ds.sigma != 0) & ~np.isnan(self.ds.sigma)) ** -2
 
