@@ -137,7 +137,7 @@ def test_get_sensors_with_deterministic_field(mock_read, mock_meta, mock_environ
 
     # Capture printed output
     out = capsys.readouterr().out
-    assert "Found 32 sensors" in out
+    assert "Found 33 sensors" in out
 
     # Verify sensor_args created and structure correct
     sa = bpr.sensor_args
