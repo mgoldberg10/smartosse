@@ -19,7 +19,6 @@ setup(
             'xmitgcm',
             'ecco_v4_py',
             'xgcm',
-            'argparse',
             'cartopy',
             'tabulate',
             'typing',

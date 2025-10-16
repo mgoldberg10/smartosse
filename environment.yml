@@ -12,7 +12,6 @@ dependencies:
   - xarray
   - xmitgcm
   - xgcm
-  - argparse
   - cartopy
   - tabulate
   - typing
