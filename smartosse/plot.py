@@ -2,7 +2,7 @@
 # which borrowed from xgcm/ecco_v4_py plotting, which relies on pyrsample
 # to map llc grid onto regular lat-lon before plotting with cartopy
 #
-# other particular features of aste_cartopy are inspired by various
+# other particular features of region_cartopy are inspired by various
 # stackexchang posts, e.g. the set_boundary feature
 import numpy as np
 import matplotlib.pyplot as plt
@@ -87,9 +87,9 @@ def plotpc(obj, da=None, am_init_kwargs=None, **am_kwargs):
     # --- Handle figure/axis logic ---
     ax = am_kwargs.pop("ax", None)
     if ax is None:
-        # I choose this cartopy setup to be my default because 
-        # it's most often the region I'm plotting
-        fig, ax = aste_cartopy_lc()
+        # I choose the spna region to be my default
+        # for my own convenience
+        fig, ax = spna()
     else:
         fig = None
 
@@ -402,7 +402,7 @@ def gl_label_defaults(fontsize=15):
         'fontsize' : fontsize
     }
 
-def aste_cartopy(
+def region_cartopy(
                  n=1,
                  m=1,
                  xmin=-100,
@@ -415,6 +415,7 @@ def aste_cartopy(
                  projection='Mollweide',
                  show_gl=True,
                  show_land=True,
+                 npts=20,
                  return_gl=False,
                  gl=None,
                  gl_dlon=20,
@@ -432,7 +433,7 @@ def aste_cartopy(
     # trigger "special single-plot" behavior
     called_explicitly = 'n' in user_passed or 'm' in user_passed
     
-    # --- Special-case behavior for bare call aste_cartopy() ---
+    # --- Special-case behavior for bare call region_cartopy() ---
     if not called_explicitly:
         # You can drop in your "fancy" single-plot behavior here
         # For example:
@@ -468,10 +469,10 @@ def aste_cartopy(
     gl_list = []
 
     aoi = mpath.Path(
-        list(zip(np.linspace(xmin, xmax, n), np.full(n, ymax))) +
-        list(zip(np.full(n, xmax), np.linspace(ymax, ymin, n))) +
-        list(zip(np.linspace(xmax, xmin, n), np.full(n, ymin))) +
-        list(zip(np.full(n, xmin), np.linspace(ymin, ymax, n)))
+        list(zip(np.linspace(xmin, xmax, npts), np.full(npts, ymax))) +
+        list(zip(np.full(npts, xmax), np.linspace(ymax, ymin, npts))) +
+        list(zip(np.linspace(xmax, xmin, npts), np.full(npts, ymin))) +
+        list(zip(np.full(npts, xmin), np.linspace(ymin, ymax, npts)))
     )
 
     for ax in axes.ravel():
@@ -517,14 +518,14 @@ def aste_cartopy(
         return fig, axes
 
 
-def aste_cartopy_lc(*args, **kwargs):
+def spna(*args, **kwargs):
     """
-    Square LambertConformal wrapper for aste_cartopy.
+    Square LambertConformal Subpolar North Atlantic-specific wrapper region_cartopy.
 
     Examples
     --------
-    >>> fig, ax = aste_cartopy_lc()       # single fancy plot
-    >>> fig, axs = aste_cartopy_lc(1, 3)  # 1×3 Lambert grid
+    >>> fig, ax = spna()       # single fancy plot
+    >>> fig, axs = spna(1, 3)  # 1×3 Lambert grid
     """
     default_args = {
         'projection': 'LambertConformal',
@@ -543,11 +544,11 @@ def aste_cartopy_lc(*args, **kwargs):
         },
     }
     default_args.update(kwargs)
-    return aste_cartopy(*args, **default_args)
+    return region_cartopy(*args, **default_args)
 
 
-def aste_cartopy_greenlandzoom(set_boundary=False, **kwargs):
-    return aste_cartopy_lc(
+def spna_greenlandzoom(set_boundary=False, **kwargs):
+    return spna(
         xmax=-20, ymin=50, ymax=83, gl_dlon=10, gl_dlat=10,
         gl_label_args = dict(
             bottom=dict(threshold=0.0001, rotate=False, pad=.01),
@@ -559,7 +560,7 @@ def aste_cartopy_greenlandzoom(set_boundary=False, **kwargs):
 
 
 def retain_only_perimiter_gl_labels(axes, gl):
-    """Currently hardcoded to work with to aste_cartopy_lc"""
+    """Currently hardcoded to work with to region_cartopy_lc"""
     nrows, ncols = axes.shape
 
     for i, ax in enumerate(axes.ravel()):
