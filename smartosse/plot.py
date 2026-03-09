@@ -551,7 +551,7 @@ def spna_greenlandzoom(set_boundary=False, **kwargs):
     return spna(
         xmax=-20, ymin=50, ymax=83, gl_dlon=10, gl_dlat=10,
         gl_label_args = dict(
-            bottom=dict(threshold=0.0001, rotate=False, pad=.01),
+            bottom=dict(threshold=0.0001, rotate=True, pad=.05),
             fontsize=16
         ),
         set_boundary=set_boundary,

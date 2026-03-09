@@ -6,6 +6,7 @@ import xarray as xr
 from typing import List
 from tabulate import tabulate
 import re
+from pathlib import Path
 import xmitgcm.utils as xu
 from .utils import *
 
@@ -140,6 +141,8 @@ class BPReader:
 
                 # Append the DataArray to the list
                 data_list.append(da)
+                print(fname)
+                print(da.dims, da.shape)
 
             # Add the 'ioptim' coordinate for different iternums
             data_vars[var_name] = xr.concat(data_list, dim='ioptim')
@@ -150,8 +153,9 @@ class BPReader:
 
     def compute_model_anom(self):
         model_str = f'm_bp{self.ecco_frequency}'
-        model_anom_str = f'{model_str}_anom'
-        self.ds[model_anom_str] = 100 / 9.81 * (self.ds[model_str] - self.ds[model_str].mean('time'))
+        if model_str in list(self.ds.keys()):
+            model_anom_str = f'{model_str}_anom'
+            self.ds[model_anom_str] = 100 / 9.81 * (self.ds[model_str] - self.ds[model_str].mean('time'))
 
     def read_weight(self, iternum=0):
         """Load weights, attempting to intuit from data.ecco"""
@@ -203,20 +207,92 @@ class BPReader:
         self.ds['sigma'] = sigma.where(sigma != -9999.).squeeze()
         self.ds['weight'] = self.ds.sigma.where((self.ds.sigma != 0) & ~np.isnan(self.ds.sigma)) ** -2
 
-    def get_sensors(self, bad_val=0.):
-        """Find coordinates of sensors -- this is specific to the case in which we have (fixed in time) pointwise bp data"""
-        nt = len(self.ds.time)
-        time = 0
-        while time <= nt:
-            tile, j, i = np.where(self.ds.bpdifanom_raw.isel(ioptim=0, time=time) != bad_val)
-            if (len(tile) > 0) & (len(j) > 0) & (len(i) > 0):
-                break
-            time += 1
-        if time > nt:
-            print('Error: could not find sensor indices')
+    def get_sensors(self, bad_vals=[0., -9999.]):
+        """
+        Find coordinates of sensors for fixed-in-time pointwise bp data.
+    
+        Strategy
+        --------
+        1. Try to infer sensor locations from self.ds.bpdifanom_raw
+        2. If that fails, parse gencost_datafile(1) from data.ecco
+           and read the corresponding ASTE binary
+        """
+    
+        # --------------------------------------------------
+        # Method 1: infer from dataset directly
+        # --------------------------------------------------
+        try:
+            nt = self.ds.dims.get("time", 0)
+    
+            found = False
+            for time in range(nt):
+                da = self.ds.bpdifanom_raw.isel(ioptim=0, time=time)
+                mask = ~np.isin(da.values, bad_vals)
+                tile, j, i = np.where(mask)
+    
+                if len(tile) > 0:
+                    found = True
+                    break
+    
+            if found:
+                print(f"Found {len(tile)} sensors from bpdifanom_raw (time index {time})")
+    
+                self.sensor_args = dict(
+                    tile=xr.DataArray(tile, dims="sensor"),
+                    j=xr.DataArray(j, dims="sensor"),
+                    i=xr.DataArray(i, dims="sensor"),
+                )
+                return
+    
+        except Exception as e:
+            print("WARNING: failed to infer sensors from dataset, falling back.")
+            print(f"Reason: {e}")
+    
+        # --------------------------------------------------
+        # Method 2: parse data.ecco and read binary
+        # --------------------------------------------------
+        try:
+            run_dir = Path(self.run_dir_root)
+            data_ecco = run_dir / "iter0000" / "data.ecco"
+    
+            if not data_ecco.exists():
+                raise FileNotFoundError(f"{data_ecco} not found")
+    
+            text = data_ecco.read_text()
+    
+            # Match: gencost_datafile(1) = 'filename',
+            m = re.search(
+                r"gencost_datafile\s*\(\s*1\s*\)\s*=\s*'([^']+)'",
+                text,
+            )
+            if m is None:
+                raise ValueError("Could not find gencost_datafile(1) in data.ecco")
+    
+            fname = m.group(1)
+            binpath = run_dir / "iter0000" / fname
+    
+            if not binpath.exists():
+                raise FileNotFoundError(f"Binary file {binpath} not found")
+    
+            da = read_aste_bin(str(binpath))[0]
+            mask = ~np.isin(da.values, bad_vals)
+            tile, j, i = np.where(mask)
+    
+            if len(tile) == 0:
+                raise RuntimeError("Binary read succeeded but no sensors found")
+    
+            print(f"Found {len(tile)} sensors from {fname}")
+    
+            self.sensor_args = dict(
+                tile=xr.DataArray(tile, dims="sensor"),
+                j=xr.DataArray(j, dims="sensor"),
+                i=xr.DataArray(i, dims="sensor"),
+            )
             return
-        print(f'Found {len(tile)} sensors')
-        self.sensor_args = dict(tile=xr.DataArray(tile), j=xr.DataArray(j), i=xr.DataArray(i))
+    
+        except Exception as e:
+            print("ERROR: failed to determine sensor locations by any method.")
+            raise RuntimeError(e)
 
     def get_cost(self):
         # Check if self.ds exists

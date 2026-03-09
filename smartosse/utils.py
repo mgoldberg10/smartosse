@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import os
 import xmitgcm.utils as xu
 import xarray as xr
+from xmitgcm.utils import rebuild_llc_facets, llc_facets_3d_spatial_to_compact, get_extra_metadata
 
 def write_float32(fout,fld):
     with open(fout, 'wb') as f:
@@ -51,6 +52,12 @@ def grep_ctrl(field, fname='data.ctrl'):
     grepstr = subprocess.check_output(sysstr, shell=True)
     # return list of ctrl info
     return grepstr.decode().split(',')[:-1]
+
+def get_basin(
+    basin_dir='/work/08381/goldberg/ls6/aste_270x450x180/run_template/input_basin/',
+    basin_fname='basin_masks_eccollc_90x50_llc270A.bin',
+    ):
+    return read_aste_bin(basin_dir + basin_fname)
 
 
 def read_mds_nosuffixpatch(*args, **kwargs):
@@ -371,7 +378,7 @@ def read_domain_bin(fname, dtype=">f4", shape=None, domain="aste",
     return da.squeeze()
 
 
-def read_aste_bin(fname, nx=270, nz=None, var_name=None, dims=None):
+def read_aste_bin(fname, nx=270, nz=None, var_name=None, dims=None, **kwargs):
     """
     Convenience wrapper for reading ASTE binary files as xarray.DataArray.
 
@@ -393,10 +400,10 @@ def read_aste_bin(fname, nx=270, nz=None, var_name=None, dims=None):
     da : xarray.DataArray
         ASTE DataArray.
     """
-    return read_domain_bin(fname, domain='aste', nx=nx, nz=nz, var_name=var_name, dims=dims)
+    return read_domain_bin(fname, domain='aste', nx=nx, nz=nz, var_name=var_name, dims=dims, **kwargs)
 
 
-def read_llc_bin(fname, nx=90, nz=None, var_name=None, dims=None):
+def read_llc_bin(fname, nx=90, nz=None, var_name=None, dims=None, **kwargs):
     """
     Convenience wrapper for reading ECCO binary files as xarray.DataArray.
 
@@ -418,4 +425,25 @@ def read_llc_bin(fname, nx=90, nz=None, var_name=None, dims=None):
     da : xarray.DataArray
         ECCO DataArray.
     """
-    return read_domain_bin(fname, domain='llc', nx=nx, nz=nz, var_name=var_name, dims=dims)
+    return read_domain_bin(fname, domain='llc', nx=nx, nz=nz, var_name=var_name, dims=dims, **kwargs)
+
+def write_aste_compact(fname, da, nx=270, nrepeat=1):
+    aste_extra_metadata = get_extra_metadata(domain='aste', nx=nx)
+    if 'tile' in da.dims:
+        da = da.rename({'tile':'face'})
+    if 'time' in da.dims:
+        da = da.rename({'time':'k'})
+    if 'k' not in da.dims:
+        da = da.expand_dims(k=np.arange(nrepeat))
+    da_facets = rebuild_llc_facets(da, aste_extra_metadata)
+    da_compact = llc_facets_3d_spatial_to_compact(da_facets, 'k', aste_extra_metadata)
+    write_float32(fname, da_compact)
+
+def get_fH(ds, g=9.81, tau=86164):
+    # coriolis
+    H = ds.Depth
+    lat = ds.YC
+    Omega = (2 * np.pi) / tau
+    lat_rad = (np.pi / 180) * lat  # convert latitude from degrees to radians
+    f = 2 * Omega * np.sin(lat_rad)
+    return f, H
