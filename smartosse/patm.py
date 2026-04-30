@@ -90,7 +90,7 @@ def load_forcing_generic(
         xarray.DataArray: Data with dimensions [time, lat, lon].
     """
 
-    dataset = dataset or re.search(r'(jra55|jra3q|ERA5|erai|era_interim)', str(forcing_dir)).group(1).lower()
+    dataset = dataset or re.search(r'(jra55|jra3q|ERA5|erai|era_interim|EIG)', str(forcing_dir)).group(1).lower()
     fname = f"{dataset}_{fld}_{year}"
 
     if dataset == 'jra55':
@@ -156,7 +156,7 @@ def load_forcing_generic(
         ])
         lat = np.cumsum(np.insert(lat_increments, 0, lat0))
 
-    elif dataset.lower() in ['erai', 'era_interim', 'era-interim']:
+    elif dataset.lower() in ['erai', 'era_interim', 'era-interim', 'eig']:
         nx, ny = 256, 512
         freq = "6H"
 
