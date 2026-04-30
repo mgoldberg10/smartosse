@@ -28,17 +28,19 @@ class NatureRun:
 
     def load_nr_field(self):
         if self.fld_type == 'bp':
-            self._load_nr_bp()
+            self._load_nr_surf(varname='PhiBot')
         elif self.fld_type == 'psi':
             self._load_nr_psi()
         elif self.fld_type == 'bt':
             self._load_nr_bt()
         elif self.fld_type == 'fwflx':
             self._load_nr_fwflx()
+        elif self.fld_type == 'eta':
+            self._load_nr_surf(varname='Eta')
         else:
             raise ValueError("Unsupported field type")
     
-    def _load_nr_bp(self):
+    def _load_nr_surf(self, varname='PhiBot'):
         nr_list = []
         for face in aste_tiles:
             bp_face_paths = np.sort(glob.glob(self.nr_dir + f'*face{face:02d}*'))
@@ -47,7 +49,7 @@ class NatureRun:
         nr_bp = xr.concat(nr_list, dim='face')
         nr_bp = nr_bp.rename({'face': 'tile'})
         nr_bp['tile'] = np.arange(len(nr_bp.tile))
-        self.fld_full = nr_bp.PhiBot # all possible nr times
+        self.fld_full = nr_bp[varname]
         self.fld = None
 
     def _load_nr_psi(self):
@@ -109,6 +111,9 @@ class ForecastModel:
         elif self.fld_type == 'fwflx':
             self.fld_type_str =  'ADV_{FW}'
             self._load_fm_fwflx()
+        if self.fld_type == 'eta':
+            self.fld_type_str = '\eta'
+            self._load_fm_eta()
         else:
             raise ValueError("Unsupported field type. Choose 'bp', 'psi', 'bt', or 'fwflx'.")
 
@@ -123,6 +128,23 @@ class ForecastModel:
         fm_bp = self.bpr.ds[f'm_bp{self.ecco_frequency}_anom']
 
         self.fld = fm_bp
+
+    def _load_fm_eta(self):
+        """Load the ETAN field."""
+        self.ds_surf = open_asteoptimdataset(
+            self.run_dir,
+            grid_dir=self.grid_dir,
+            optim_iters=self.iternums,
+            prefix=['state_2d_set1']
+        )
+
+        self.ds_surf = self.ds_surf.isel(time=slice(0, len(self.datetimes)))
+        if self.datetimes is not None:
+            self.ds_surf['time'] = self.datetimes
+
+        fm_eta = self.ds_surf.ETAN
+        self.fld = fm_eta
+
 
     def _load_fm_psi(self):
         """Load or generate the PSI field."""
