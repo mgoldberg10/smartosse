@@ -292,7 +292,7 @@ def read_mds(fname, iternum=None, use_mmap=None, endian='>', shape=None,
 
 def read_domain_bin(fname, dtype=">f4", shape=None, domain="aste",
                            nx=None, nz=None, var_name=None, dims=None,
-                           use_dask=False, llc=True):
+                           vert_dim="k", use_dask=False, llc=True):
     """
     Reader for MITgcm binary files coming from irregular grid
 
@@ -366,7 +366,7 @@ def read_domain_bin(fname, dtype=">f4", shape=None, domain="aste",
         if arr.ndim == 3:
             dim_names = ("tile", "j", "i")
         elif arr.ndim == 4:
-            dim_names = ("k", "tile", "j", "i")
+            dim_names = (vert_dim, "tile", "j", "i")
         else:
             raise ValueError(f"Unexpected array shape {arr.shape}")
     else:

@@ -264,8 +264,27 @@ class llc_map:
 
         else:
             cb = None
+       
         return ax, cb, pl
 
+    def quiver(self, u, v, ax=None, maskW=None, maskS=None, skip=1, ke_threshold=.1, **kwargs):
+        # u and v should already be rotated to true E/N 
+        # e.g. via EUVNfromUXVY
+
+        ke = np.sqrt(u**2 + v**2)
+        max_speed = np.nanmax(ke)
+        u = u.where(ke>ke_threshold*ke.max(),np.nan)
+        v = v.where(ke>ke_threshold*ke.max(),np.nan)
+        
+        x, y = self.new_grid_lon, self.new_grid_lat
+        u = self.regrid(u)
+        v = self.regrid(v)
+        
+        # downsample
+        x, y, u, v = [ff[::skip, ::skip] for ff in [x, y, u, v]]
+        q = ax.quiver(x, y, u, v, transform=ccrs.PlateCarree(), **kwargs)
+        return q
+        
     def regrid(self, xda):
         """regrid xda based on llcmap grid"""
         return pr.kd_tree.resample_nearest(
@@ -366,10 +385,6 @@ def process_gridline_labels(gl, label_args):
                 direction = 'right'
             elif min_x is not None and abs(x - min_x) < threshold * x_range:
                 direction = 'left'
-
-        #if direction is None:
-        #    # Could not classify direction, skip this label
-        #    continue
 
         opts = label_args.get(direction, {})
         pad_value = opts.get('pad', 0)  # could be False, 0, or a number
