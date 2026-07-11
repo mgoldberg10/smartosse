@@ -110,18 +110,28 @@ class llc_map:
     # Tim: note that most of this was copied and pasted from the xgcm documentation
     # Because I couldn't write anything fancier
 
-    def __init__(self, ds, dx=0.25, dy=0.25):
+    def __init__(self, ds, dx=0.25, dy=0.25, radius_of_influence=None):
 
         # Extract LLC 2D coordinates
         lons_1d = ds.XC.values.ravel()
         lats_1d = ds.YC.values.ravel()
+
+        # Nearest-neighbour fill radius for regrid(). The old hardcoded 100 km
+        # under-fills COARSE source grids (e.g. ASTE30 cells reach ~300 km near
+        # 26N) -> the regridded field is mostly NaN holes and local features
+        # (e.g. the barotropic MVT@26N sensitivity) render as sparse specks.
+        # Default to 1.5x the median nearest-neighbour spacing of the source
+        # grid, which fills without over-smoothing; scales with resolution.
+        if radius_of_influence is None:
+            radius_of_influence = self._estimate_radius(lons_1d, lats_1d)
+        self.radius_of_influence = radius_of_influence
 
         # Define original grid
         self.orig_grid = pr.geometry.SwathDefinition(lons=lons_1d, lats=lats_1d)
 
         # Longitudes latitudes to which we will we interpolate
         lon_tmp = np.arange(-180, 180, dx) + dx / 2
-        lat_tmp = np.arange(-35, 90, dy) + dy / 2
+        lat_tmp = np.arange(-90, 90, dy) + dy / 2
 
         # Define the lat lon points of the two parts.
         self.new_grid_lon, self.new_grid_lat = np.meshgrid(lon_tmp, lat_tmp)
@@ -285,13 +295,27 @@ class llc_map:
         q = ax.quiver(x, y, u, v, transform=ccrs.PlateCarree(), **kwargs)
         return q
         
+    @staticmethod
+    def _estimate_radius(lons, lats, factor=1.5):
+        """1.5x the median nearest-neighbour great-circle spacing (m).
+
+        Robust to the source grid resolution (ASTE30 ~142 km median -> ~213 km,
+        which fully fills the 0.25deg target; finer grids get a smaller radius).
+        """
+        from scipy.spatial import cKDTree
+        lo = np.radians(np.asarray(lons, float)); la = np.radians(np.asarray(lats, float))
+        xyz = np.column_stack([np.cos(la) * np.cos(lo), np.cos(la) * np.sin(lo), np.sin(la)])
+        chord = cKDTree(xyz).query(xyz, k=2)[0][:, 1]          # unit-sphere chord to NN
+        gc = 2 * np.arcsin(np.clip(chord / 2, 0, 1)) * 6371000.0
+        return float(factor * np.median(gc))
+
     def regrid(self, xda):
         """regrid xda based on llcmap grid"""
         return pr.kd_tree.resample_nearest(
             self.orig_grid,
             xda.values,
             self.new_grid,
-            radius_of_influence=100000,
+            radius_of_influence=self.radius_of_influence,
             fill_value=None,
         )
 
@@ -357,26 +381,30 @@ def process_gridline_labels(gl, label_args):
 
         # First try to determine direction by the text content
         direction = None
-        if 'E' in text or 'W' in text:
-            # Longitude labels → likely top or bottom
-            # Determine if top or bottom by proximity to max_y or min_y
-            if max_y is not None and abs(y - max_y) < 0.1 * y_range:
-                direction = 'top'
-            elif min_y is not None and abs(y - min_y) < 0.1 * y_range:
-                direction = 'bottom'
-        elif 'N' in text or 'S' in text:
-            # Latitude labels → likely left or right
-            if max_x is not None and abs(x - max_x) < 0.1 * x_range:
-                direction = 'right'
-            elif min_x is not None and abs(x - min_x) < 0.1 * x_range:
-                direction = 'left'
 
-        # If still no direction from text, fallback to your previous positional logic:
-        # Note, this can be troublesome in some edge cases
-        # It is possible for a label to meet multiple criteria, in which case the first
-        # condition below will determine the direction
+        if 'E' in text or 'W' in text or text == '0°':
+            # Longitude labels → top or bottom
+            #
+            # For Mollweide-like projections the longitude labels naturally
+            # separate into positive-y (top) and negative-y (bottom).
+            direction = 'top' if y > 0 else 'bottom'
+
+        elif 'N' in text or 'S' in text:
+            # Latitude labels → left or right
+            #
+            # For Mollweide-like projections the latitude labels naturally
+            # separate into negative-x (left) and positive-x (right).
+            direction = 'right' if x > 0 else 'left'
+
+        # If still no direction from text, fallback to the previous
+        # positional logic.
+        #
+        # Note, this can be troublesome in some edge cases.
+        # It is possible for a label to meet multiple criteria, in which case
+        # the first condition below will determine the direction.
         if direction is None:
             threshold = 0.1
+
             if min_y is not None and abs(y - min_y) < threshold * y_range:
                 direction = 'bottom'
             elif max_y is not None and abs(y - max_y) < threshold * y_range:
@@ -388,14 +416,17 @@ def process_gridline_labels(gl, label_args):
 
         opts = label_args.get(direction, {})
         pad_value = opts.get('pad', 0)  # could be False, 0, or a number
-        
+
         if opts.get('hide', False):
             artist.set_visible(False)
+
         if opts.get('rotate', False):
             artist.set_rotation(0)
+
         if pad_value:
             if pad_value is True:
                 pad_value = 0.04  # default pad amount
+
             if direction == 'bottom':
                 artist.set_position((x, y - pad_value * abs(y)))
             elif direction == 'top':
@@ -406,7 +437,6 @@ def process_gridline_labels(gl, label_args):
                 artist.set_position((x + pad_value * abs(x), y))
 
         artist.set_fontsize(label_args.get('fontsize', 15))
-
 
 def gl_label_defaults(fontsize=15):
     return {
@@ -573,6 +603,26 @@ def spna_greenlandzoom(set_boundary=False, **kwargs):
         **kwargs
     )
 
+def aste_atl(*args, **kwargs):
+    default_args = {
+        'ymax': 85,
+        'ymin': -35,
+        'gl_label_args': {
+            'top':    {'hide': True,  'rotate': True,  'pad': 0.0},
+            'bottom': {'hide': False, 'rotate': True,  'pad': 0.0},
+            'left':   {'hide': False, 'rotate': False, 'pad': 0.0},
+            'right':  {'hide': True,  'rotate': False, 'pad': 0.0, 'threshold': 0.2},
+            'fontsize': 10,  # Default fallback fontsize
+        },
+    }
+
+    user_fontsize = kwargs.pop('fontsize', None)
+    if 'gl_label_args' in kwargs:
+        default_args['gl_label_args'].update(kwargs.pop('gl_label_args'))
+    if user_fontsize is not None:
+        default_args['gl_label_args']['fontsize'] = user_fontsize
+    default_args.update(kwargs)
+    return region_cartopy(*args, **default_args)
 
 def retain_only_perimiter_gl_labels(axes, gl):
     """Currently hardcoded to work with to region_cartopy_lc"""

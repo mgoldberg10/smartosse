@@ -47,10 +47,26 @@ def plot_cost(run_dir, iter_subdirs=True, fname_pfx='costfunction'):
     ax.set_ylabel(r'Cost function $J$', size=20);
     return fig, ax
 
-def grep_ctrl(field, fname='data.ctrl'):
-    sysstr='grep \'^ xx.*{}.*\' {} | cut -d \'=\' -f2 | cut -d \"\'\" -f2 | sed \'s/$/,/g\' | tr -d \\\\n'.format(field,fname)
+def grep_ctrl(path, field='file'):
+    """
+    Parse data.ctrl in a run directory and return values for a given field.
+
+    Parameters
+    ----------
+    path : str
+        Path to the run directory containing data.ctrl.
+    field : str, optional
+        Field to extract from data.ctrl. Typical values are 'file' (control
+        variable filenames) and 'weight' (weight filenames). Default is 'file'.
+
+    Returns
+    -------
+    list of str
+        Extracted values for all matching lines.
+    """
+    fname = os.path.join(path.rstrip('/'), 'data.ctrl')
+    sysstr = "grep '^ xx.*{}.*' {} | cut -d '=' -f2 | cut -d \"'\" -f2 | sed 's/$/,/g' | tr -d \\\\n".format(field, fname)
     grepstr = subprocess.check_output(sysstr, shell=True)
-    # return list of ctrl info
     return grepstr.decode().split(',')[:-1]
 
 def get_basin(
@@ -346,6 +362,7 @@ def read_domain_bin(fname, dtype=">f4", shape=None, domain="aste",
         shape = (nz, ny, nx)
 
     # --- Read using standard reader ---
+
     data_dict = read_mds_nosuffixpatch(
         fname=fname,
         shape=shape,
