@@ -361,7 +361,9 @@ def compute_vlims(field, pad_frac=0.2, **plt_kwargs):
     return vmin_nice, vmax_nice
 
 def process_gridline_labels(gl, label_args):
-    plt.gcf().canvas.draw()
+#    plt.gcf().canvas.draw()
+    gl.axes.figure.canvas.draw_idle()
+    gl.axes.figure.canvas.flush_events()
 
     labels = gl._labels
     x_positions = [lbl.artist.get_position()[0] for lbl in labels if '°' in lbl.artist.get_text()]

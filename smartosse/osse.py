@@ -99,6 +99,7 @@ class ForecastModel:
 
     def load_fm_field(self):
         """Load the field based on the specified type."""
+        print(self.fld_type)
         if self.fld_type == 'bp':
             self.fld_type_str = 'p_b'
             self._load_fm_bp()
@@ -111,11 +112,11 @@ class ForecastModel:
         elif self.fld_type == 'fwflx':
             self.fld_type_str =  'ADV_{FW}'
             self._load_fm_fwflx()
-        if self.fld_type == 'eta':
+        elif self.fld_type == 'eta':
             self.fld_type_str = '\eta'
             self._load_fm_eta()
         else:
-            raise ValueError("Unsupported field type. Choose 'bp', 'psi', 'bt', or 'fwflx'.")
+            raise ValueError("Unsupported field type. Choose 'bp', 'psi', 'bt', 'fwflx', or 'eta'.")
 
     def _load_fm_bp(self, var_names=['bpdifanom_smooth']):
         """Load the BP field."""
