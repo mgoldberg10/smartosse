@@ -169,3 +169,10 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# smartosse/figures: keep only code + STATUS.md tracked; renders and the
+# large reanalysis-derived .nc fields are regenerable and shouldn't bloat
+# git history.
+smartosse/figures/output/
+smartosse/figures/data/
+smartosse/figures/.claude/
