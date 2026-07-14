@@ -66,6 +66,16 @@ distinguish cables at all. New layout, a plain 2x2 grid:
   `use_latex_times()` + `use_embedded_pdf_fonts()`, `make_fig9(ds)`), same
   recipe as prior updates. Current render: `figures/output/fig9_patm_unc.png`
   + `.pdf`.
+- Added `debug_panel_c.py` -- a paste-into-Jupyter-cells snippet (not an
+  importable module -- has `%autoreload` magics) that loads only what panel
+  (c) needs (`ds`, `sigma_spread`, `row2_data`) once, then re-plots just
+  `ax_c` on repeat, skipping `make_fig9()`'s maps/relcon loads entirely.
+  Motivated by Matt hand-copying make_fig9()'s panel-c body into a notebook
+  cell and it silently going stale relative to the real source (the legend
+  call he'd pasted predated the ncol=4/label_y_offsets changes above) --
+  this gives an always-current alternative for panel-only iteration. Same
+  pattern (load once + a thin re-plot cell) should be replicated for panel
+  (d) if that starts getting the same manual-copy treatment.
 
 ## Update 2026-07-13 (older) — where we left off
 

@@ -172,9 +172,9 @@ PD_2003_RMS_HPA = float(np.sqrt(PD_2003_MSD_HPA2))  # ~2 hPa; what actually gets
 # Row-2 line styles, shared between plot_patm_adjustment_timeseries (the
 # actual per-panel colored lines) and _row2_legend_handles (the black-only
 # legend swatches) so the two can't drift apart.
-STD_LINE_STYLE = dict(ls='-')
-SPREAD_LINE_STYLE = dict(ls='--')            # was ':' -- now "the density P&D used to have"
-PD_LINE_STYLE = dict(ls=(0, (1, 1)), lw=1.8)  # densely dotted, black, a bit thicker than before
+STD_LINE_STYLE = dict(ls='-', lw=2.0)
+SPREAD_LINE_STYLE = dict(ls='--', lw=2.0)     # was ':' -- now "the density P&D used to have"
+PD_LINE_STYLE = dict(ls=(0, (1, 1)), lw=2.2)  # densely dotted, black, a bit thicker than before
 SIGMA_BAND_LABEL = r'$\pm\sigma_{p_{\mathrm{atm}}}^{\mathrm{spread}}$'
 
 
@@ -587,10 +587,12 @@ def plot_relcon_bars_grouped(
     region_colors=None,
     shade_factors=None,
     group_order=RELCON_GROUP_ORDER,
-    bar_width=0.32,
+    bar_width=0.36,   # bumped from 0.32 -- "a smidge" wider per Matt
     pair_gap=0.04,
     spread_hatch='///',
-    tick_fontsize=16,
+    xtick_fontsize=16,
+    ytick_fontsize=16,
+    rotation=0,
     ylabel_fontsize=20,
     ylabel='relative contribution',
 ):
@@ -603,6 +605,14 @@ def plot_relcon_bars_grouped(
     cable identity reads consistently across the whole figure. Hatch (not
     color, which is already spoken for) distinguishes STD (plain) from
     SPREAD (`spread_hatch`) within each cable's pair of bars.
+
+    `xtick_fontsize`/`ytick_fontsize` (split from the old single
+    `tick_fontsize`) size the "LS_cable"-style x labels and the 0/0.5/1 y
+    labels independently. `rotation` (degrees) rotates the x labels -- pass
+    e.g. 45 when `xtick_fontsize` is large enough that "LS_cable" etc. would
+    otherwise crowd into their neighbors; labels right-align against their
+    tick (`ha='right', rotation_mode='anchor'`) when rotated, so the rotation
+    pivots around the tick rather than the label's center.
     """
     region_labels = region_labels or REGION_LABELS
     region_colors = region_colors or REGION_COLORS
@@ -624,10 +634,15 @@ def plot_relcon_bars_grouped(
                 bottom += val
 
     ax.set_xticks(x)
-    ax.set_xticklabels([latex_escape(f'{region_labels[r]}_cable') for r in regions], fontsize=tick_fontsize)
+    xticklabels = [latex_escape(f'{region_labels[r]}_cable') for r in regions]
+    if rotation:
+        ax.set_xticklabels(xticklabels, fontsize=xtick_fontsize, rotation=rotation,
+                            ha='right', rotation_mode='anchor')
+    else:
+        ax.set_xticklabels(xticklabels, fontsize=xtick_fontsize)
     ax.set_ylim(0, 1)
     ax.set_yticks([0, 0.5, 1])
-    ax.tick_params(axis='y', labelsize=tick_fontsize)
+    ax.tick_params(axis='y', labelsize=ytick_fontsize)
     ax.set_ylabel(ylabel, fontsize=ylabel_fontsize)
     ax.grid(axis='y', alpha=0.3)
     ax.set_axisbelow(True)
@@ -806,13 +821,14 @@ def plot_patm_adjustment_combined(
     sigma_band_hpa=None,
     pd_rms_hpa=PD_2003_RMS_HPA,
     yticks=(0, 1, 2),
-    ylim=(-1, 3),
+    ylim=(-1.5, 3.2),
     tick_labelsize=16,
     ylabel='[hPa]',
     ylabel_fontsize=20,
     label_fontsize=16,
     min_label_gap=0.18,
     label_x=1.015,
+    label_y_offsets=None,
     band_kwargs=None,
     pd_line_kwargs=None,
     std_line_kwargs=None,
@@ -832,6 +848,11 @@ def plot_patm_adjustment_combined(
     overlap) rather than an 8-entry (4 cable x 2 linestyle) legend -- pass
     a separate small legend (e.g. _row2_legend_handles()) for the
     STD/SPREAD/band/P&D linestyle key, which is cable-agnostic.
+
+    `label_y_offsets` (dict[region] -> additive hPa offset, applied *after*
+    _declutter_1d) lets a specific label be nudged by hand -- e.g. the
+    lowest-value cable never gets pushed by the declutter (nothing sits
+    below it to push against), so this is the way to move it independently.
     """
     region_labels = region_labels or REGION_LABELS
     region_colors = region_colors or REGION_COLORS
@@ -880,6 +901,8 @@ def plot_patm_adjustment_combined(
     # just past the right spine regardless of ylim) -- decluttered so they
     # don't collide where the 4 curves converge.
     label_ys = _declutter_1d(end_vals, min_label_gap)
+    if label_y_offsets:
+        label_ys = [y + label_y_offsets.get(region, 0.) for region, y in zip(regions, label_ys)]
     yaxis_transform = ax.get_yaxis_transform()
     for region, val, y, color in zip(regions, end_vals, label_ys, end_colors):
         if abs(y - val) > 1e-9:
@@ -1045,19 +1068,21 @@ def make_fig9(
 
     plot_patm_adjustment_combined(ax_c, row2_data, ylim=(-1, 3), label_fontsize=18, min_label_gap=0.3)
     add_panel_label(ax_c, 'c', fontsize=26, x=0.02, y=0.95)
-    # bbox_to_anchor y nudged below the panel-label letter (y=0.95, ~0.87 or
-    # lower for its own box height) so the two don't overlap -- they used to
-    # sit on top of each other at plain loc='upper left'.
+    # Horizontal, one row, anchored low/left (near the sigma band, clear of
+    # the panel label at top and the end-of-line cable labels on the right)
+    # -- Matt's own placement, from testing directly against the render.
     ax_c.legend(handles=_row2_legend_handles(), fontsize=13, frameon=False,
-                loc='upper left', bbox_to_anchor=(0.0, 0.87))
+                loc='upper left', bbox_to_anchor=(0., 0.18), ncol=4, columnspacing=0.8, handlelength=1.4)
 
-    plot_relcon_bars_grouped(ax_d, relcon_per_region, tick_fontsize=14, ylabel_fontsize=18)
-    add_panel_label(ax_d, 'd', fontsize=26, x=0.02, y=0.95)
-    shade_legend = ax_d.legend(handles=_relcon_shade_legend_handles(), fontsize=12, frameon=False,
-                                loc='upper left', bbox_to_anchor=(1.02, 1.0), title='component',
-                                title_fontsize=12)
+    plot_relcon_bars_grouped(ax_d, relcon_per_region, xtick_fontsize=20, ytick_fontsize=18,
+                              rotation=45, ylabel_fontsize=30)
+    add_panel_label(ax_d, 'd', fontsize=50, x=-0.4, y=1.04)
+    shade_legend = ax_d.legend(handles=_relcon_shade_legend_handles(), fontsize=19, frameon=False,
+                                loc='upper left', bbox_to_anchor=(1.02, 1.0), title='control',
+                                title_fontsize=22)
     ax_d.add_artist(shade_legend)
-    ax_d.legend(handles=_relcon_hatch_legend_handles(), fontsize=12, frameon=False,
-                loc='upper left', bbox_to_anchor=(1.02, 0.55), title='run', title_fontsize=12)
+    ax_d.legend(handles=_relcon_hatch_legend_handles(), fontsize=19, frameon=False,
+                loc='upper left', bbox_to_anchor=(1.02, 0.5),
+                title=r'$\sigma_{\mathrm{p}_{\mathrm{atm}}}$', title_fontsize=22)
 
     return fig, dict(a=ax_a, b=ax_b, c=ax_c, d=ax_d)
