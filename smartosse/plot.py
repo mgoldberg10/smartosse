@@ -116,12 +116,7 @@ class llc_map:
         lons_1d = ds.XC.values.ravel()
         lats_1d = ds.YC.values.ravel()
 
-        # Nearest-neighbour fill radius for regrid(). The old hardcoded 100 km
-        # under-fills COARSE source grids (e.g. ASTE30 cells reach ~300 km near
-        # 26N) -> the regridded field is mostly NaN holes and local features
-        # (e.g. the barotropic MVT@26N sensitivity) render as sparse specks.
-        # Default to 1.5x the median nearest-neighbour spacing of the source
-        # grid, which fills without over-smoothing; scales with resolution.
+        # set radius based on lat/lons
         if radius_of_influence is None:
             radius_of_influence = self._estimate_radius(lons_1d, lats_1d)
         self.radius_of_influence = radius_of_influence
@@ -237,6 +232,13 @@ class llc_map:
 
         # Colorbar...
         if show_cbar:
+            # Pull `cax` (a pre-built target axes, e.g. a dedicated
+            # colorbar-strip subplot) out *before* the deepcopy below --
+            # deepcopying a live matplotlib Axes recurses into its Spines,
+            # which don't support __deepcopy__ and raise. Shallow-copy first
+            # so this pop doesn't mutate a caller-shared dict.
+            cbar_kwargs = dict(cbar_kwargs)
+            cax = cbar_kwargs.pop("cax", None)
             cbar_kwargs = copy.deepcopy(cbar_kwargs)
 
             # Ensure vmin and vmax exist in cbar_kwargs or extract from the plotted data
@@ -248,19 +250,18 @@ class llc_map:
 
             default_ticks = np.linspace(vmin, vmax, 5)
             cbar_kwargs.setdefault("ticks", default_ticks)
-            cbar_kwargs.setdefault("shrink", .8)
 
             if "ticks" not in cbar_kwargs:
                 cbar_kwargs["ticks"] = default_ticks
-        
 
-            cb = plt.colorbar(
-                pl,
-                ax=ax,
-                orientation=orientation,
-                pad=pad,
-                **cbar_kwargs
-            )
+            if cax is not None:
+                # Placement is fully determined by cax itself -- the
+                # steal-space-from-ax knobs (pad/shrink) don't apply and
+                # aren't accepted by Colorbar() once cax is given.
+                cb = plt.colorbar(pl, cax=cax, orientation=orientation, **cbar_kwargs)
+            else:
+                cbar_kwargs.setdefault("shrink", .8)
+                cb = plt.colorbar(pl, ax=ax, orientation=orientation, pad=pad, **cbar_kwargs)
             cb.set_label(cbar_label)
             cb.ax.tick_params(**cbar_ticks_params)
 
@@ -301,6 +302,7 @@ class llc_map:
 
         Robust to the source grid resolution (ASTE30 ~142 km median -> ~213 km,
         which fully fills the 0.25deg target; finer grids get a smaller radius).
+        This was added because ASTE30 fields weren't plotting properly
         """
         from scipy.spatial import cKDTree
         lo = np.radians(np.asarray(lons, float)); la = np.radians(np.asarray(lats, float))
@@ -469,6 +471,8 @@ def region_cartopy(
                  gl_dlat=20,
                  set_boundary=True,
                  gl_label_args=None,
+                 gl_linewidth=None,
+                 gl_color=None,
                  ax=None,
                  ):
 
@@ -533,13 +537,20 @@ def region_cartopy(
 
         ax.set_extent(extent, crs=ccrs.PlateCarree())
 
+        gl_style_kwargs = {}
+        if gl_linewidth is not None:
+            gl_style_kwargs['linewidth'] = gl_linewidth
+        if gl_color is not None:
+            gl_style_kwargs['color'] = gl_color
+
         gl = ax.gridlines(draw_labels=True,
                           crs=ccrs.PlateCarree(),
                           x_inline=False,
                           y_inline=False,
                           linestyle=':',
                           alpha=int(show_gl),
-                          zorder=2)
+                          zorder=2,
+                          **gl_style_kwargs)
         gl.xlocator = mticker.FixedLocator(range(-180, 180, gl_dlon))
         gl.ylocator = mticker.FixedLocator(range(-90, 90, gl_dlat))
         gl.xformatter = LONGITUDE_FORMATTER

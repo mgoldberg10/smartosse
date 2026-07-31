@@ -72,6 +72,11 @@ class NatureRun:
         self.fldUV = [self.fld.ADVe_FW, self.fld.ADVn_FW]
         self.fld = self.fldUV[0]
         self.fld_full = self.fldUV[0]
+        # NOTE: this NR source (a single pre-summed-over-k file, opened
+        # lazily via dask) is already fast to *open* -- the potentially slow
+        # step is the per-experiment time slice/resample done against it in
+        # OSSE.__init__, which is what gets cached (see
+        # OSSE._advfw_nr_cache_path) rather than anything here.
 
 class ForecastModel:
     """Handles loading of the FM dataset."""
@@ -166,9 +171,11 @@ class ForecastModel:
             print(f'File not found: {file_path}')
             print('Loading trsp diagnostics dataset')
 
+
+
             self.ds_trsp = open_asteoptimdataset(
                 self.run_dir,
-                grid_dir=os.path.join(self.run_dir, f'iter{self.iternums[0]:04d}/'),
+                grid_dir=self.grid_dir,
                 optim_iters=[self.iternums[-1]],
                 prefix=['trsp_3d_set1']
             )
@@ -190,7 +197,7 @@ class ForecastModel:
     def _load_fm_bt(self):
         self.ds_trsp = open_asteoptimdataset(
             self.run_dir,
-            grid_dir=os.path.join(self.run_dir, f'iter{self.iternums[0]:04d}/'),
+            grid_dir=self.grid_dir,
             optim_iters=self.iternums,
             prefix=['trsp_3d_set1']
         )
@@ -206,7 +213,26 @@ class ForecastModel:
         self.fldUV = UV_bt # convenient to store so you can load once and toggle between the two
         self.fld = self.fldUV[0]
 
+    def _advfw_cache_path(self):
+        """Path for the cached (already vertically-summed and time-sliced)
+        advective FW-flux diagnostic for this run_dir/iternums/datetimes
+        combination -- computing this from the raw trsp_3d_set1/
+        state_3d_set1 MITgcm binaries (a full month of 3D fields across
+        every tile) is the slow step Fig. 7's FW-flux panel was built to
+        avoid re-paying on every notebook restart.
+        """
+        iter_str = '_'.join(str(i) for i in self.iternums)
+        date_str = self.datetimes[0].strftime('%Y%m%d') if self.datetimes is not None else 'unknown'
+        return os.path.join(self.run_dir, f'advfw_fm_cache_{date_str}_iters{iter_str}.nc')
+
     def _load_fm_fwflx(self):
+        cache_path = self._advfw_cache_path()
+        if os.path.exists(cache_path):
+            print(f'Loading cached advfw diagnostic: {cache_path}')
+            ds_cache = xr.open_dataset(cache_path)
+            self.fldUV = [ds_cache.ADVe_FW, ds_cache.ADVn_FW]
+            self.fld = self.fldUV[0]
+            return
 
         self.ds_trsp = open_asteoptimdataset(
             self.run_dir,
@@ -234,10 +260,8 @@ class ForecastModel:
         S_at_v = grid_aste.interp(self.ds_state.SALT, 'Y', boundary='extend')
 
         print('Computing ADVx_FW')
-#        self.ADVx_FW = (self.ds_trsp.UVELMASS * self.ds_trsp.hFacW * self.ds_trsp.dyG * self.ds_trsp.drF * (Sref - S_at_u)/Sref ).sum('k').compute()
         self.ADVx_FW = (self.ds_trsp.UVELMASS * self.ds_trsp.dyG * self.ds_trsp.drF * (Sref - S_at_u)/Sref ).sum('k').compute()
         print('Computing ADVy_FW')
-#        self.ADVy_FW = (self.ds_trsp.VVELMASS * self.ds_trsp.hFacS * self.ds_trsp.dxG * self.ds_trsp.drF * (Sref - S_at_v)/Sref ).sum('k').compute()
         self.ADVy_FW = (self.ds_trsp.VVELMASS * self.ds_trsp.dxG * self.ds_trsp.drF * (Sref - S_at_v)/Sref ).sum('k').compute()
 
         print('Compute UEVNfromUXVY')
@@ -246,21 +270,50 @@ class ForecastModel:
         self.fldUV = ADVen # convenient to store so you can load once and toggle between the two
         self.fld = self.fldUV[0]
 
+        print(f'Saving advfw diagnostic cache: {cache_path}')
+        xr.Dataset({'ADVe_FW': self.fldUV[0], 'ADVn_FW': self.fldUV[1]}).to_netcdf(cache_path)
+
 class OSSE:
     """Handles the comparison of a single FM against the NR."""
     
     def __init__(self, forecast_model, nature_run, open_asteoptimdataset_kwargs = {}):
         self.fm = forecast_model
         self.nr = nature_run
-        
+
         if self.nr.fld is None or not (
             np.array_equal(self.nr.fld.time.values, self.fm.fld.time.values)
         ):
-            self.nr.fld = self.nr.fld_full.sel(time=slice(self.fm.datetimes[0], self.fm.datetimes[-1]))
-            self.nr.fld = self.nr.fld.resample(time=f'1{self.fm.freq_str}').mean()
+            self.nr.fld = self._load_nr_fld_sliced()
 
         self.load_grid_ds()
         self.compute_skill()
+
+    def _nr_slice_cache_path(self):
+        """Cache path (in the FM's run_dir, i.e. "the experiment run
+        folder") for the NR field already sliced to the FM's date range and
+        resampled to its frequency. Only used for fld_type='fwflx', the one
+        NR load slow enough (a full-resolution LLC4320 diagnostic) to be
+        worth caching per-experiment; other field types re-slice cheaply
+        from an already-loaded, much smaller NR dataset.
+        """
+        date_str = self.fm.datetimes[0].strftime('%Y%m%d') if self.fm.datetimes is not None else 'unknown'
+        return os.path.join(self.fm.run_dir, f'advfw_nr_cache_{date_str}_{self.fm.freq_str}.nc')
+
+    def _load_nr_fld_sliced(self):
+        if self.nr.fld_type != 'fwflx':
+            fld = self.nr.fld_full.sel(time=slice(self.fm.datetimes[0], self.fm.datetimes[-1]))
+            return fld.resample(time=f'1{self.fm.freq_str}').mean()
+
+        cache_path = self._nr_slice_cache_path()
+        if os.path.exists(cache_path):
+            print(f'Loading cached NR advfw slice: {cache_path}')
+            return xr.open_dataset(cache_path)[self.nr.fld_full.name]
+
+        fld = self.nr.fld_full.sel(time=slice(self.fm.datetimes[0], self.fm.datetimes[-1]))
+        fld = fld.resample(time=f'1{self.fm.freq_str}').mean().compute()
+        print(f'Saving NR advfw slice cache: {cache_path}')
+        fld.to_dataset().to_netcdf(cache_path)
+        return fld
     def copy(self):
         """Return a deep copy of the OSSE object without re-running init logic."""
         new = OSSE.__new__(OSSE)  # Create uninitialized instance
