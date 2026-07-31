@@ -1,6 +1,461 @@
+# Fig. 7 (Labrador Sea cable "freshwater flux journey", `fig:greenland_adjustment`)
+
+## 2026-07-15: layout rebuilt on Matt's tested skeleton, panel content re-matched to the notebook
+
+Matt wasn't happy with a prior session's first pass at this figure -- panels
+looked visibly different from ``greenland_ekman_transport_patmon.ipynb``'s
+actual saved output. He supplied his own tested skeleton (verified with fake
+cartopy data that panel proportions survive real map projections) and asked
+for a fresh, literal port of the notebook's panels onto it, deferring the
+two Round-2-reviewer-requested additions (arrow-scale-legend boxes on panel
+(a), feature-label legend on panel (d)) to a later pass.
+
+- **Layout**: `fig7_skeleton.py` replaced with Matt's tested version
+  (`gs_outer` 2x1 -> row1 `GridSpecFromSubplotSpec` 2x3 with (a)/(b) each
+  getting a dedicated colorbar-strip sub-row and (c) spanning both sub-rows
+  -> row2 full-width (d)). **Critical fix carried over**: `ax.set_aspect
+  ('auto')` on every cartopy geo-axes (a/b/d), called right after axes
+  creation and before `set_extent` -- without it, cartopy's equal-aspect
+  projection silently shrinks the axes within its gridspec cell at draw
+  time to preserve the projection's true aspect ratio, which overrides the
+  configured width/height ratios in a way that isn't visible until the
+  figure is actually rendered (bare rectangles don't show it). Verified
+  with a fake-pcolormesh+coastlines render (not just tinted boxes) before
+  and after -- panels now fill their gridspec boxes exactly.
+  `fig7_greenland_fwflux.py`'s `make_fig7` now builds the identical
+  gridspec (not a simpler 2x2 as before) with the same aspect fix; the two
+  files are meant to stay in lockstep -- don't touch one without re-running
+  the other's skeleton test.
+- **Real bug found and fixed in `smartosse/plot.py`**: routing (a)/(b)'s
+  colorbars into their dedicated `cax_a`/`cax_b` strip axes (rather than
+  letting `plotpc` steal space from `ax` via `pad`/`shrink`, the only mode
+  that existed before) means passing a live `cax=` Axes through
+  `cbar_kwargs`. `llc_map.__call__`'s colorbar section did
+  `cbar_kwargs = copy.deepcopy(cbar_kwargs)` unconditionally -- deep-copying
+  a live `Axes` recurses into its `Spines`, which don't implement
+  `__deepcopy__` and raise `ValueError: 'Spines' object does not contain a
+  '__deepcopy__' spine`. Fixed by popping `cax` out of a shallow-copied
+  `cbar_kwargs` *before* the deepcopy, then passing it straight to
+  `plt.colorbar(pl, cax=cax, ...)` (skipping the now-inapplicable
+  `pad`/`shrink` steal-space kwargs in that branch). Backward compatible --
+  no `cax` key means identical behavior to before.
+- **Real content bug found and fixed in `fig7_greenland_fwflux.py`'s panel
+  (a)**: the prior session's `plot_panel_a` defaulted `vmax_curl=3` with no
+  outlier clipping. The notebook's actual *published* panel (a) (cell 26 of
+  the source notebook, the cell whose figure was saved to
+  `dwind_labsea_0_20_lambertconformal.pdf`) uses `vmax=40` for the curl
+  colorbar range and clips outliers beyond 8 std before plotting
+  (`curl_da.where(|curl_da - mean| <= 8*std)`) -- an order-of-magnitude
+  colorbar mismatch plus a missing clip, which is why the previous render
+  looked nothing like the notebook despite correct quiver scales. Fixed:
+  `plot_panel_a` now defaults `vmax_curl=40, clip_std=8`, matching cell 26
+  exactly. Also fixed the colorbar to `pad=.08` + 5-point
+  `linspace(-vmax_curl, vmax_curl, 5)` ticks + `'{:d}'`-style integer
+  labels (`style_colorbar(..., ticks=...)`), matching cell 26's
+  `cbar_kwargs` (was `pad=.02` with `style_colorbar`'s default 3 ticks).
+- **Real content bug found and fixed in panel (d)**: the prior session's
+  quiverkey used `U=5000` at `(X=0.18, Y=0.06)` with no bounding box. The
+  notebook's actual published panel (d) (cell 35, saved to
+  `dfw_labsea_0_20_lambertconformal.pdf`) uses `U=10000` (label `$10^4$
+  m$^3$s$^{-1}$`) at `(X=0.7, Y=0.1)` with a boxing `Rectangle` at
+  `(0.625, 0.075)`, size `(0.36, 0.06)`. Fixed to match exactly.
+- Panel (b) cbar gained `ticklabel_format='{:d}'` (was defaulting to
+  `'{:.2f}'`, e.g. "-10.00" instead of "-10") to match cell 28.
+- **Verified against the actual notebook-saved reference PDFs**, not just
+  read by inspection: `/work/08381/goldberg/ls6/smart_da/figs/
+  greenland_adjustment/individual2/d{wind,bp,fw}_labsea_0_20_
+  lambertconformal.pdf` (converted to PNG via `pdftoppm`, this machine has
+  no `pdf2image`/`pymupdf`). Panels (a)/(b) now match closely: same
+  localized diagonal-band pattern down the Labrador Sea/Davis Strait
+  corridor (this is real physics, not a masking bug -- this run
+  (`runc68v_froman_partialcables_jrastd/201201/labsea`) is a
+  **partial-cable** OSSE, so the wind/current control adjustment is
+  genuinely ~zero/NaN-masked outside the region the Labrador Sea cable's
+  sensors actually constrain), same color ranges, same quiver
+  convergence pattern. Panel (d)'s gateway lines/labels and SPNA
+  circulation schematic also match position.
+- **Open item, not resolved this session**: panel (d)'s ADV-flux quiver
+  field (`field='adv'`) renders visibly denser/darker than the reference
+  PDF despite identical `skip=4, ke_threshold_min=.08, ke_threshold_max=.7`
+  params to the notebook's own `pq_adv` dict. Suspected cause: the new
+  `llc_map` regrids onto a 0.25 deg lat/lon grid by default (`plot.py`'s
+  `llc_map.__init__`, `dx=dy=0.25`) before `get_quiver`'s `[::skip]`
+  decimation -- if the old (now-removed) `asteoptim`/`smartcables` quiver
+  pipeline regridded onto something coarser, the same `skip` value would
+  decimate far less aggressively here, explaining the extra density. Not
+  chased further this session (would need either the old pipeline's source,
+  long gone, or a parameter sweep) -- flag for Matt's review; a larger
+  `skip` or narrower `ke_threshold` window on `plot_panel_d`'s
+  `quiver_kwargs` is the likely fix if he wants it tighter.
+- **Caching added**: `WindBPFWPlotter.load_vel_advfw` (new, in
+  `wind_bp_fw.py`) nc-caches `uE`/`vN`/`ADVe_FW`/`ADVn_FW` together, keyed
+  on `(run_dir, iternums)`, in the same directory-scoped-cache style as
+  `smartosse.osse.ForecastModel`'s existing `advfw_fm_cache_*.nc` (prefixed
+  `wb_` to avoid colliding with it, since this class computes advfw
+  independently rather than through `ForecastModel(fld_type='fwflx')`).
+  First real run this session: 97.6s (full month of 3D trsp_3d_set1 +
+  state_3d_set1 across all 6 ASTE tiles, for both iterations). Cache file:
+  `.../labsea/wb_veladvfw_cache_iters0_20.nc`. `load_wind_bp_fw` now calls
+  this instead of the old separate `load_vel`/`load_state3d`/`get_advfw`
+  sequence.
+- Both `arrow_legend` (panel a) and `feature_labels` (panel d) kwargs kept
+  in the functions but now default to off/`None` -- per Matt's explicit
+  ask to defer those two reviewer-requested additions to a later pass, not
+  because the code was removed. Flip them on once he's ready.
+- Current render: `figures/output/fig7_greenland_fwflux.png`/`.pdf`
+  (real `runc68v_froman_partialcables_jrastd/201201/labsea` data,
+  `use_latex_times()` + `use_embedded_pdf_fonts()`).
+
+### Next steps
+
+- Panel (d) ADV quiver density (see "Open item" above) -- needs Matt's
+  visual call on whether it's worth chasing further.
+- Font embedding not yet re-checked with the project's standard
+  `grep -a -o '/Subtype */Type[0-9C]*\|/FontFile[0-9]*'` recipe this
+  session -- do that before treating the PDF as submission-ready.
+- Arrow-scale-legend box (panel a) and feature-label legend (panel d), the
+  two reviewer-requested additions, deliberately deferred -- see module
+  docstring in `fig7_greenland_fwflux.py`.
+- `fig7_greenland_fwflux.py`/`fig7_skeleton.py` still untracked in git, like
+  the other per-figure modules in this package.
+
+---
+
+# Fig. 3 (sigma_phibot synthetic OBP uncertainty map, `fig:bp_std`)
+
+## 2026-07-14: new module `fig3_bp_std.py`, thicker/darker gridlines
+
+Matt asked to remake Fig. 3 (the sigma_phibot map in `uncertainty.tex`,
+original code in `smart_cables/osse/fig_sigma_pb.ipynb`) with wider
+meridian/parallel gridlines, following this package's `figures/fig3...`
+naming pattern used by the other per-figure modules.
+
+- New `fig3_bp_std.py`: same content as the notebook (sigma_phibot in cm on
+  `spna()`, `grace_cmap`, cable sensor dots, manual horizontal colorbar) --
+  only deliberate change is gridline styling.
+- **Gridline width/color**: `smartosse/plot.py`'s `region_cartopy`/`spna`
+  previously had no way to control gridline styling -- `ax.gridlines(...)`
+  was called with no explicit `linewidth`/`color`, which (checked directly)
+  resolves to matplotlib's `grid.linewidth`/`grid.color` rcParam defaults,
+  `0.8`pt / light grey (`#b0b0b0`). Added optional `gl_linewidth`/`gl_color`
+  kwargs to both functions (default `None` -- only passed to `ax.gridlines()`
+  if set, so every other figure using `spna()`/`region_cartopy()` is
+  unaffected). `fig3_bp_std.py` uses `GL_LINEWIDTH=1.8`, `GL_COLOR='k'`.
+  **Color choice**: Matt asked whether black/white/grey reads best against
+  this figure's busy rainbow `grace_cmap` fill (white -> blue -> green ->
+  yellow -> red -> dark red). Black recommended and used -- it has strong
+  contrast against the light end of the colormap and the silver land fill,
+  and (checked in the actual render, not just reasoned about) stays legible
+  even over the darkest red patches (small fraction of the map area, mostly
+  near Greenland/Norway coasts) since gridlines are dotted rather than solid.
+  Pure white would vanish over the colormap's own near-white low end; a
+  mid-grey is a weaker compromise at both extremes than black.
+- **Real bug hit and fixed, not a data issue with our code**: the notebook's
+  sensor-location loading (`BPReader(run_dir, iternums=[0]).sensor_args`)
+  crashes outright on this machine -- `BPReader.read_data()`'s per-iteration
+  `bpdatanom_raw`/`bpdatanom_smooth`/`m_bpday` files are missing from
+  `iter0000` on `/scratch` (purged -- same purge issue flagged in
+  `fig1_global_cables.py`'s docstring), so `_discover_bp_vars()` finds zero
+  variables and the resulting empty `xr.Dataset` has no `'k'` dim to rename,
+  raising `ValueError`. Worked around by reproducing `BPReader.get_sensors()`'s
+  own data.ecco-fallback logic (Method 2) directly in
+  `fig3_bp_std.load_cable_sensor_lonlat()`, bypassing `BPReader` entirely:
+  parse `iter0000/data.ecco`'s `gencost_datafile(1)` entry, read that one
+  binary (`SMART_bp_..._142sensors_fullnatl.bin`, itself a symlink resolving
+  to `/work`, not `/scratch` -- unaffected by the purge) via `read_aste_bin`,
+  mask non-sensor cells (`0`, `-9999`) same as `BPReader`. Found 157 sensors
+  this way (not 142, despite the filename) -- cross-checked against
+  `fig1_global_cables.load_partial_cables()`'s 4 partial-cable coordinate
+  files (labsea 64 + subgyre 25 + northsea 41 + newfoundland 27 = 157
+  exactly), a strong independent confirmation this is the right sensor set
+  for the full SPNA cable.
+- Verified end-to-end (real render, `module load texlive` + `esmpy_3.10`,
+  `python -m smartosse.figures.fig3_bp_std`), not just read by inspection --
+  output visually checked (gridlines clearly bolder/darker, data/cable dots
+  otherwise match the existing `figures/bp_day_var_cm_withcable.png`) and PDF
+  font embedding re-checked with the project's standard
+  `grep -a -o '/Subtype */Type[0-9C]*\|/FontFile[0-9]*'` recipe: real
+  embedded Type 1 fonts present. Current render:
+  `figures/output/fig3_bp_std.png`/`.pdf`.
+
+### Next steps / open items
+
+- Not yet swapped into the manuscript (`figures/bp_day_var_cm_withcable.png`
+  in `smartosse-manuscript/figures/` is still the standing version) --
+  flag for Matt's visual review of the new gridlines before replacing it.
+- `fig3_bp_std.py` is untracked in git, like the other per-figure modules in
+  this directory.
+
+---
+
+# Fig. 1 (global cable network + SPNA inset)
+
+## Update 2026-07-14 (latest): multiline legend height-matched to the inset, fontsize bumped on both legends
+
+Matt liked the multiline-label render from the update below, with 2 more
+asks: make that legend's box height ~match the inset's height (top/bottom
+aligned), and bump the fontsize a little on both legends (inset + global
+panel, so they still match each other).
+
+- **Fontsize: `LEGEND_FONTSIZE` 27.2 (`17*1.6`) -> 32**, still the one
+  constant driving both the global panel's Representative/Funded legend and
+  the inset's region legend, so they can't drift apart.
+- **New `INSET_MULTILINE_LEGEND_LABELSPACING = 0.6`**, applied to
+  `legend()`'s `labelspacing` only when `legend_multiline=True` (the
+  single-line variant is untouched, keeps matplotlib's own default
+  spacing). Tuned by sweep, not guessed: built the actual figure
+  end-to-end at each (fontsize, labelspacing) combo and compared
+  `ax_inset.get_window_extent()` against `ax_inset.get_legend()
+  .get_window_extent()` on the real renderer (`fig.canvas.get_renderer()`
+  post-`draw()`) -- matplotlib's own default `labelspacing=0.5` undershoots
+  the inset's height at `fontsize=32` (ratio 0.972); `0.6` lands at
+  leg_h=465.3px vs inset_h=465.0px (ratio 1.001), effectively exact at this
+  figure's size/dpi.
+- **Top/bottom alignment came for free once the height matched** -- the
+  legend was already anchored at the inset's own vertical center
+  (`loc='center left', bbox_to_anchor=(1.05, 0.5)`, unchanged from the
+  previous update), confirmed numerically (both bounding boxes' y-centers
+  landed at the same value, 350.0px, at every labelspacing tried in the
+  sweep) -- so matching the height alone was sufficient, no separate
+  top/bottom-anchoring logic was needed.
+- Re-rendered both standing variants end-to-end at the new fontsize/
+  labelspacing and visually verified:
+  `figures/output/fig1_global_cables.png`/`.pdf` (single-line) and
+  `figures/output/fig1_global_cables_multiline_legend.png`/`.pdf`
+  (multiline, now height-matched).
+
+## Update 2026-07-14 (later, cont.): inset legend to the right + a second, multiline-label render
+
+Per Matt's follow-up review of the top-center/2-col legend from the update
+below:
+
+- **Inset region legend moved from top-center/2-col to the inset's right
+  side, 1 column.** `plot_spna_inset`'s legend `loc`/`bbox_to_anchor` ->
+  `loc='center left', bbox_to_anchor=(1.05, 0.5), ncol=1` (was
+  `loc='lower center', bbox_to_anchor=(0.5, 1.0), ncol=2`). Sits outside
+  the inset axes' right edge; `bbox_inches='tight'` (already used by both
+  `savefig` calls) expands the saved canvas to fit it, same pattern as
+  fig9's row-2/row-3 outside-axes legends.
+- **Fontsize matched to the global panel's Representative/Funded legend.**
+  New shared constant `LEGEND_FONTSIZE = 17 * 1.6` (was a separately
+  hardcoded `22` for the inset, `17 * 1.6` for the global panel); both
+  legends now reference it, so they can't drift apart again.
+- **Two renders produced, per Matt's request** -- `plot_spna_inset`/
+  `make_fig1` gained a `legend_multiline` bool (default False, so the old
+  single-line-label behavior is still the default for any other caller).
+  When True, each legend entry's abbreviated code and parenthetical region
+  name split onto two lines (`_region_legend_label()`, replaces the first
+  `' ('` with `'\n('`) -- e.g. "LS_cable" / "(Labrador Sea)" stacked,
+  instead of "LS_cable (Labrador Sea)" on one line. Matplotlib splits `\n`
+  in a `Text` itself (renders each line separately, even under
+  `text.usetex=True`), so no extra LaTeX-side handling was needed beyond
+  the existing `latex_escape()` call (still applied, on the full
+  label before or after the newline split doesn't matter since `latex_escape`
+  doesn't touch whitespace/newlines).
+- Rendered both end-to-end and visually verified:
+  `figures/output/fig1_global_cables.png`/`.pdf` (single-line, the standing
+  default) and `figures/output/fig1_global_cables_multiline_legend.png`/
+  `.pdf` (new, multiline variant) -- both via the same one-off script
+  pattern as before (`module load texlive`, `esmpy_3.10`,
+  `make_fig1(legend_multiline=...)`).
+
+## Update 2026-07-14: legend labels, inset gridline labels, legend placement, ASTE domain outline
+
+`fig1_global_cables.py` was already untracked/rendered from a prior session
+(no earlier STATUS.md entry for it) with the projection/rectangular-inset
+rebuild from the manuscript's Round-2 revision plan already done. This
+session closed out the remaining open items from that plan plus a few of
+Matt's styling requests, all in `fig1_global_cables.py`:
+
+- **Region legend labels -> experiment codes.** `REGION_LABELS` changed from
+  plain region names ("Labrador Sea") to `"LS_cable (Labrador Sea)"` /
+  `"SPG_cable (Subpolar Gyre)"` / `"NS_cable (North Sea)"` /
+  `"Nfl_cable (Newfoundland)"`, per the manuscript README's Fig. 1 rebuild
+  bullet. Underscores are already handled -- the legend call already wraps
+  labels in `latex_escape()` (needed since `make_fig1()` renders with
+  `use_latex_times()`), so no separate escaping fix was needed here.
+- **Inset lat/lon gridline labels: turned out to already be fixed, not a
+  live bug.** The old `figures/output/fig1_global_cables.png` (from the
+  prior session, timestamped before this one) showed visible "60N/50N/40N"
+  labels floating left of the inset frame despite
+  `INSET_GL_LABEL_ARGS_NONE` setting `hide: True` on all 4 sides. Suspected
+  cause going in: `process_gridline_labels`'s hide is a one-time
+  `artist.set_visible(False)` right after `ax.gridlines(draw_labels=True)`,
+  and Cartopy's Gridliner regenerates label artists on later draws (e.g.
+  `add_inset_indicator_line`'s explicit `fig.canvas.draw()`, or the final
+  `savefig`), which could plausibly reset visibility. **Tested directly,
+  not just inferred**: built a minimal repro (bare `spna()` call with the
+  same `gl_label_args`, drawn 2x + `savefig`) and then the actual
+  `make_fig1()` path, checking `gl._labels[*].artist.get_visible()` after
+  each draw/savefig. Labels stayed hidden throughout in both cases -- the
+  hide mechanism works correctly as written. The stale PNG was just that:
+  stale, generated before the current `hide: True` config was in place (or
+  from a version of the code predating it). No code change needed; a fresh
+  render confirms no lat labels on the inset.
+- **Inset region legend: moved to top-center, 2 columns.** Was
+  `loc='lower right', bbox_to_anchor=(1.15, 0.0)`; now
+  `loc='lower center', bbox_to_anchor=(0.5, 1.0), ncol=2` -- anchors the
+  legend box's own bottom-center just above the inset frame.
+- **Full ASTE domain outlined/filled on the global panel** (manuscript
+  README bullet: "Outline the full ASTE domain in Fig. 1 and mark the SPNA
+  window" -- the SPNA window part was already done via the existing black
+  box). New `load_aste_domain_mask()` (`open_astedataset().hFacC.isel(k=0)`,
+  the standard grid-only load already used elsewhere in this package) +
+  new `plot_aste_domain()`, called from `plot_global_panel()` before
+  anything else so cable dots/box/legend all land on top of it.
+  - **Real bug hit and fixed**: Matt's suggested one-liner
+    (`ds.plotpc(mask, ax=ax, levels=[1], cmap='Greys_r')`) hits
+    matplotlib's `ValueError: Filled contours require at least 2 levels` --
+    `llc_map.__call__`'s `contourf` branch is built for continuous
+    multi-level fields (auto `vmin`/`vmax`/`cmap` via `compute_vlims`), not
+    a flat single-color fill for a binary mask. `plot_aste_domain()`
+    bypasses `ds.plotpc`/`llc_map.__call__` entirely for this (still reuses
+    `llc_map.regrid` for the actual LLC tile/j/i -> lat/lon regridding, not
+    reimplemented) and calls `ax.contourf` directly with `levels=[0.5, 1.5]`
+    + `colors=[color]` (one filled band, fixed color, no colormap) -- 2
+    levels bound exactly one region for a binary mask, sidestepping the
+    "needs >=2 levels" restriction cleanly rather than working around it.
+    A second, separate `ax.contour(..., levels=[0.5], colors='k')` on a
+    0/1-filled (not 0/NaN) version of the same regridded field draws a thin
+    boundary line -- needed a *different* NaN-handling of the mask than the
+    fill: the fill wants non-ASTE cells as NaN (so the base ocean color
+    shows through untouched), but a contour *line* can't be traced against
+    NaN on one side of the 0.5 threshold, so the outline pass uses a 0/1
+    version instead. Verified end-to-end (real render, not just read by
+    inspection) and by cropping/inspecting the PNG at the Bering Strait
+    notch and the domain's -34S southern cutoff -- the outline is smooth at
+    this figure's scale (regrid at `dx=dy=0.5`, coarser than `llc_map`'s own
+    0.25 default since this is a binary domain edge, not a field needing
+    fine gradients), no blockiness or artifacts.
+  - **Color scheme (Matt asked for a recommendation, not just "make it
+    work")**: ASTE-domain ocean keeps the pre-existing `OCEAN_COLOR`
+    ('silver') -- same shade as the inset's ocean, so the global panel's
+    ASTE patch and the SPNA inset visually read as "the same water," tying
+    the two panels together. Non-ASTE ocean gets a new, distinct
+    `NONASTE_OCEAN_COLOR = '#dbe7ec'` (a pale, cool blue-gray) rather than
+    reusing silver everywhere -- picked so it reads as recessive/background
+    water (a common light-blue-ocean cartographic convention) without
+    competing with the gray/red cable dots plotted on top, and stays
+    clearly distinct from both the silver ASTE patch and the white land
+    (verified visually, not just by eye on the color values in isolation --
+    checked the actual render, not a swatch). Land is drawn *after* the
+    ASTE fill (`zorder`: ocean fills 0 -> ASTE patch ~0.5 -> ASTE outline
+    ~0.6 -> land 1 -> cable dots 2/3 -> SPNA box 10) so any near-coastline
+    regrid bleed from the mask doesn't tint land pixels.
+- Module docstring updated to match (legend position, ASTE domain mention)
+  -- was describing the pre-this-session state (bottom-right legend, no
+  ASTE outline).
+
+Verified via a real end-to-end render (`module load texlive`, `esmpy_3.10`
+env, `make_fig1()` -> `savefig` both PNG/PDF) -- not just read by
+inspection. Font embedding re-checked with the project's standard
+`grep -a -o '/Subtype */Type[0-9C]*\|/FontFile[0-9]*'` recipe: real
+embedded Type 1 (`/FontFile` present), consistent with the LaTeX/dvips
+route documented for Fig. 9. Current render:
+`figures/output/fig1_global_cables.png`/`.pdf`.
+
+### Next steps / open items
+
+- `fig1_global_cables.py` is still untracked in git -- not committed this
+  session either (no commit requested). `smartosse/plot_new.py` and
+  `smartosse/slope_cable.py` are also untracked, unrelated to this figure.
+- Not re-litigated, just noted: `ASTE_OCEAN_COLOR`/`NONASTE_OCEAN_COLOR`
+  are this session's judgment call on "most visually pleasing" per Matt's
+  open-ended ask -- flag for his review like any other styling choice, not
+  presented as final.
+
+---
+
 # Fig. 9 (p_atm uncertainty) — where we left off
 
-## Update 2026-07-13 (latest): 2x2 redesign per Matt's new vision
+## Update 2026-07-13 (latest, cont.): (c) legend height, split the difference
+
+`0.22` (previous update) read as too high to Matt. Settled on the midpoint
+between the two tried values, `bbox_to_anchor=(1.0, 0.175)` (halfway between
+`0.13` and `0.22`) -- still flush-right, clear of the grey band. Re-rendered:
+`figures/output/fig9_patm_unc.png`/`.pdf`.
+
+## Update 2026-07-13 (earlier, cont.): (c) legend nudged up further [superseded, see above]
+
+`ax_c.legend(..., bbox_to_anchor=(1.0, 0.13 -> 0.22))` -- too high per Matt's
+next review, see the update above for the resolved value.
+
+## Update 2026-07-13 (earlier): (c)/(d) panel-label height matching + legend tweaks
+
+- **(c) legend fontsize** 13 -> 15.
+- **(c) panel label nudged up**: `add_panel_label(ax_c, ..., y=0.95 -> 0.98)`.
+- **(d) panel label moved from "floating above the frame" to the right
+  margin, height-matched to (c)'s label.** Previously `x=0.0, y=1.15`
+  (floating above ax_d's top spine, in the row1/row2 gridspec gap -- see
+  the older update below for why: no blank space inside the stacked-to-1
+  bars for an interior label). Now `x=1.02, y=0.98` -- same y as (c)'s
+  (both axes share one gridspec row, so identical axes-fraction y = identical
+  physical height; verified via `get_window_extent()`, both labels' bboxes
+  landed at pixel y0=451.6/y1=527.7, i.e. exactly matched, not just close),
+  and x=1.02 puts it in the same right-margin column as (d)'s own legends,
+  directly above them.
+- **(d)'s two legends moved down to sit under the relocated label**:
+  `shade_legend` (the "control" p_atm/winds/other key) `bbox_to_anchor`
+  y 1.0 -> 0.82; the hatch ("sigma_patm" STD/SPREAD) legend y 0.5 -> 0.40 --
+  gap between the two anchors tightened (0.5 -> 0.42) so both still fit
+  in the available vertical span once shifted down. Verified via
+  `get_window_extent()`: (d) label's bottom edge sits ~0.1px above the
+  control legend's top edge (effectively touching, "right above it"), and
+  the control legend's bottom sits ~4.5px above the sigma_patm legend's top
+  (tight but not overlapping); the sigma_patm legend's own bottom clears
+  ax_d's bottom spine by ~18px, not clipped.
+
+Current render: `figures/output/fig9_patm_unc.png` + `.pdf`.
+
+## Update 2026-07-13 (older): colorbar orientation, panel (c) font matching, legend placement, panel (d) legend order
+
+Five targeted styling changes, all in `fig9_patm_unc.py`, verified via a real
+end-to-end render (`open_astedataset()`, `use_latex_times()` +
+`use_embedded_pdf_fonts()`, `make_fig9(ds)`) on this machine, not just read by
+inspection:
+
+- **(a)/(b) colorbar: horizontal-under-both -> vertical, to the right of (b).**
+  `make_fig9()`'s manual `cax` placement (still a manual axes, not
+  `fig.colorbar(ax=[ax_a, ax_b])`, for the same space-stealing-resize reason
+  as before) now sits at `b_x0 + pos_b.width + cbar_pad` spanning `pos_b.y0`/
+  `pos_b.height` (`cbar_width=0.018`, `cbar_pad=0.015`, figure-fraction),
+  `orientation='vertical'`, label moved from `set_xlabel` to
+  `set_ylabel(..., labelpad=8)`.
+- **(a)/(b) horizontal buffer added, sizes unchanged**: `map_gap` (the
+  variable spacing (a) and (b) apart after cartopy's aspect-shrink resolves)
+  0.005 -> 0.02. Both maps are still re-centered as a pair on `row1_center`
+  exactly as before -- only the gap between them grew, both widths/heights
+  are untouched.
+- **Panel (c) y-tick/ylabel fontsize now matches panel (d)'s.**
+  `plot_patm_adjustment_combined()` gained a `ytick_fontsize` param
+  (defaults to `tick_labelsize` if omitted, so old callers are unaffected)
+  so the y-axis tick size can be set independently of the x-axis date-tick
+  size (`tick_labelsize`, previously one param drove both). `make_fig9()`
+  now passes `ytick_fontsize=18, ylabel_fontsize=30` for panel (c), matching
+  panel (d)'s `ytick_fontsize=18, ylabel_fontsize=30` exactly.
+- **Panel (c) ylim extended down by 0.3** (`(-1, 3) -> (-1.3, 3)`) to make
+  room for the row-2 legend fully inside the white zone below the grey
+  `+/-sigma_spread` band (band half-width ~0.65 hPa averaged across the 4
+  cables -- verified numerically this session:
+  `{'labsea': 0.747, 'subgyre': 0.649, 'northsea': 0.636, 'newfoundland': 0.565}`,
+  mean ~0.649).
+- **Panel (c) legend moved from lower-left to lower-right**, flush against
+  the right spine (`loc='upper right', bbox_to_anchor=(1.0, 0.13)`, was
+  `loc='upper left', bbox_to_anchor=(0., 0.18)`) -- verified the legend's
+  right edge lands within ~9px of the axes' right edge (609px wide axes,
+  i.e. ~1.5%, matplotlib's own legend padding accounts for the rest) and
+  sits entirely below the grey band's lower edge, not touching it.
+- **Panel (d) "control" shade legend order reversed**: now reads top-to-bottom
+  $p_{\mathrm{atm}}$ / winds / other (was other/winds/$p_{\mathrm{atm}}$),
+  i.e. the headline result listed first. `_relcon_shade_legend_handles()`
+  gained an `order` param (defaults to `reversed(RELCON_GROUP_ORDER)`) --
+  `RELCON_GROUP_ORDER` itself (`('other', 'winds', 'patm')`) is unchanged and
+  still governs the bars' bottom-to-top stacking order, which this does not
+  touch.
+
+Current render: `figures/output/fig9_patm_unc.png` + `.pdf`.
+
+## Update 2026-07-13 (older): 2x2 redesign per Matt's new vision
 
 Matt: the old 4-panels-per-row layout (row 2: one timeseries panel per
 cable; row 3: one relcon bar-pair per cable) wasted space reusing the same
