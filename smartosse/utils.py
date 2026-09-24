@@ -2,7 +2,6 @@ import numpy as np
 from scipy.spatial import KDTree
 import subprocess
 import glob
-import matplotlib.pyplot as plt
 import os
 import xmitgcm.utils as xu
 import xarray as xr
@@ -40,6 +39,7 @@ def plot_cost(run_dir, iter_subdirs=True, fname_pfx='costfunction'):
     for cost_file in cost_files:
         costs.append(grep_cost('fc', cost_file))
     
+    import matplotlib.pyplot as plt  # local: keeps the extraction path free of matplotlib
     fig,ax=plt.subplots()
     ax.plot(optim_its,costs, 'k.-', markersize=15)
     ax.set_yscale('log')
