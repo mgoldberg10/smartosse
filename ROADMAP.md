@@ -57,11 +57,19 @@ oversight — `smartosse/.gitignore` line `**/figures/*` ignores the entire figu
 directory, plus `**/*.png`, `**/*.nc`, `**/*.pdf`. The handful of tracked figure modules
 were force-added past it.
 
-- [ ] Fix `smartosse/.gitignore`. It is a MATLAB-era file (`*.m~`, `*.asv`, `cable_utils/mylog.txt`)
-      that is now actively fighting the repo. The root `.gitignore` already handles
-      `figures/output/` and `figures/data/` correctly — `smartosse/.gitignore` can probably
-      be deleted outright.
-- [ ] **Triage `smartosse/figures/` (66 scripts).** Three buckets:
+- [x] ~~Fix `smartosse/.gitignore`.~~ **already gone on this branch** (checked 2026-09-24,
+      pfe checkout) — no `smartosse/.gitignore` file exists; the root `.gitignore` handles
+      `smartosse/figures/output/` and `smartosse/figures/data/` correctly and has none of the
+      MATLAB-era cruft this item described. Unclear whether it was deleted upstream of this
+      branch or never existed here — worth a `git log -- smartosse/.gitignore` check on
+      `main` before assuming this is universally resolved.
+- [ ] **Triage `smartosse/figures/` (66 scripts).** ⚠️ **Not doable from pfe** — this checkout
+      only has the ~10 tracked figure-package files plus the four `gen_*.py` cache builders
+      (added 2026-09-24); none of the ~55 untracked per-figure modules `STATUS.md` describes
+      (`fig1_global_cables.py`, `davis_*`, `gates_*`, etc.) exist on this machine — they were
+      apparently only ever created on TACC (`STATUS.md` paths are all `/work2/08381/...`) and,
+      being untracked, never traveled with `git clone`/`pull`. This whole item needs to be
+      done from a TACC checkout. Buckets below are otherwise unchanged from the original plan:
   - *Paper figures* — `fig1_global_cables`, `fig3_bp_std`, `fig5_misfit_rmse_skill`,
     `fig6_regions_skill_bp_uvbt`, `fig7_greenland_fwflux`, `fig9_*`, `fig10_patm_mechanism`,
     `figB_patm_std_4panel`, `sensor_spacing_skill_diff`, `smart_grace_mo_skill`,
@@ -71,23 +79,30 @@ were force-added past it.
     `davis_strait_repro_old_pipeline`. Decide: a clearly-labeled `figures/exploratory/`
     subdir, or cut. Leaning **keep in a subdir with a one-line README** — showing the
     exploration is not a weakness, showing it *undifferentiated from the final figures* is.
-  - *Delete outright* — `.fig7_skeleton.py.swp` (a stray vim swapfile, currently tracked-adjacent),
-    `fig9_patm_unc.py.pre_2x2_redesign` (**currently tracked** — git is the backup, this
-    file is the anti-pattern an interviewer will notice). `debug_panel_c.py` is already
+  - [x] ~~*Delete outright* — `.fig7_skeleton.py.swp`~~ (not present on this checkout — see
+    the pfe note above; presumably TACC-only, unaffected by this branch's fix) ~~,
+    `fig9_patm_unc.py.pre_2x2_redesign`~~ **deleted** (`git rm`, this session) — it was
+    tracked, git history is the backup. `debug_panel_c.py` was already
     gone (`914fb69`) — it was a Jupyter paste-buffer whose IPython magics were an E999.
 - [ ] Untracked core modules: `curl.py` (48 lines), `plot_new.py` (581), `slope_cable.py` (329),
       `wind_bp_fw.py` (526). ~1500 lines of real code invisible to git. Track or cut, but decide.
       Note `plot.py` (23 KB) and `plot_new.py` (20 KB) coexisting is a smell — resolve or rename.
+      **Also not present on this pfe checkout** (same story as the figure triage above) —
+      needs a TACC session.
 - [ ] Move the eight stray PNGs out of the repo root (`i2_ocean*.png`, `inset_*.png`,
-      including one with parentheses and the word "current" in the filename).
+      including one with parentheses and the word "current" in the filename). **Not present
+      on this pfe checkout** — needs a TACC session.
 - [ ] Decide on `smartosse/tex/` (the full manuscript source, currently untracked). Options:
       keep it out entirely until acceptance; a private sibling repo; or a `paper/` dir added
       at acceptance. **Recommend: leave it out for now**, revisit post-review.
 - [x] ~~`smartosse/__init__.py` six `from .x import *` lines~~ done (`ee84bf4`). Not a
       30-second cosmetic fix as originally filed — it was the blocker for both CI and pfe.
 - [ ] Scrub the public tree for the TACC account number (`08381`) and personal absolute paths.
-- [ ] `LICENSE` file — there is none. `setup.py` says `license=''` and `keywords='MIT License'`
-      (the license got typed into the keywords field). Pick one and add the file.
+      Deferred on purpose: the real fix is §4's `paths.py`/`sites.yml` env-var resolver, not
+      find-and-redact; scrubbing first would just mean re-editing the same lines twice.
+- [x] ~~`LICENSE` file — there is none.~~ done, this session: added `LICENSE` (MIT, matching
+      `setup.py`'s pre-existing `keywords='MIT License'` signal) and fixed `setup.py`'s
+      `license=''`/`keywords='MIT License'` (the license-in-keywords typo) to `license='MIT'`.
 
 ---
 
