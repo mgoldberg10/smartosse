@@ -107,11 +107,41 @@ See ROADMAP.md §5b for the full provenance list. Known to be already on TACC (s
 needed from pfe): MITgcm checkpoint68v source (`285cda8c7`), the `code_froman/` code
 modifications, and the 41-file namelist sets.
 
-Likely to exist only on pfe:
+### Inventory, 2026-09-24 (list only — nothing copied yet)
 
-- [ ] Job submission scripts (current versions) → `model/jobs/`
-- [ ] Nature-run extraction pipeline
-- [ ] llc4320 handling
-- [ ] ECCO `optim` driver configuration for the adjoint iterations
-- [ ] The build recipe: optfile, `genmake2` invocation, which `data.exch2` decomposition
-      the paper's runs used
+Found the pfe system-of-record: `/nobackupp27/mgoldbe1/MITgcm_c68v` is itself a git clone
+at `285cda8c7` / tag `checkpoint68v` — matches ROADMAP §5b exactly, confirming the TACC
+copy really is a copy. Run tree: `mysetups/aste_270x450x180/osses/` (**127 GB** total —
+do not `git add` this wholesale).
+
+- [x] **Job submission scripts** — found: 16 `script_*.bash` files directly under `osses/`
+      (13–14 KB each, ~205 KB total — `script_partialcables.bash`, `script_partialcables_
+      jra_std.bash`, `script_subgyre.bash`, `script_daily.bash`, `script_year2012*.bash`,
+      `script_spacing.bash`, `script_ib*.bash`, `script_uv0.bash`/`script_uvwind.bash`,
+      `script_test_ctrl_gen_rec.bash`), naming matches the `runc68v_froman_*` experiment
+      names used throughout `STATUS.md`. Each is a PBS script; representative header
+      (`script_partialcables.bash`): `#PBS -l select=15:ncpus=40:model=sky_ele`,
+      `walltime=10:00:00`, `nprocs=580`, `snx=18 sny=18` (tile decomposition — matches the
+      `18x18x580` `data.exch2` variant ROADMAP §5b already flagged as needing identification).
+      All 16 source a shared `run_logic.sh` (hang-detection wrapper around `mpiexec` — checks
+      for a stall on `dyG` and kills/restarts). **Trivial to copy** — ready for `model/jobs/`
+      whenever you want it done, not done yet per "don't move anything" above.
+- [ ] Nature-run extraction pipeline — **deprioritized, manual intervention needed** (per
+      Matt, 2026-09-24). Not inventoried.
+- [ ] llc4320 handling — **deprioritized, manual intervention needed** (same). Not inventoried.
+- [x] **ECCO `optim` driver configuration** — found: `OPTIM/`, `OPTIM_daily/`,
+      `OPTIM_daily_coldstarttrue/`, `OPTIM_DEBUG/`, `OPTIM_fullyear/`, `OPTIM_subgyre/`
+      (6 variants, one per experiment family, 3–70 GB each). The actual config is tiny and
+      mixed in with huge per-iteration state dumps: `data.optim`, `data.ctrl`, `Makefile`,
+      `optim.x` (the m1qn3-linked binary), `reset.bash` are all <10 KB each; the bulk of each
+      directory's size is `ecco_ctrl_MIT_CE_000.optNNNN` / `OPWARM.optNNNN` per-iteration
+      pickup/control-vector binaries (hundreds of MB–8 GB *each*) — **do not bring these
+      back**, only the small config files.
+- [x] **Build recipe, partial** — `build_froman/genmake.log` + `taf_ad.log` present
+      (compiler: `ifort (IFORT) 19.1.3.304`, flags include `-convert big_endian
+      -assume byterecl ... -axCORE-AVX2 -xSSE4.2 -traceback -ftz`, MPI: HPE MPT 2.30).
+      **Optfile name itself not pinned down yet** — genmake.log doesn't echo it verbatim in
+      the header; would need a closer read of the log or the actual `genmake2` command used.
+      `data.exch2` present under `input_froman/`, `input_phibot/`, `input_phibot_daily/`,
+      `input_ib/`, `input_labsea_daily/` (one per experiment family, not yet diffed against
+      each other or against TACC's copies).
