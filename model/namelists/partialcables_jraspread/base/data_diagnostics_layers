@@ -1,0 +1,365 @@
+# Diagnostic Package Choices
+#-----------------
+# for each output-stream:
+#  filename(n) : prefix of the output file name (only 8.c long) for outp.stream n
+#  frequency(n):< 0 : write snap-shot output every multiple of |frequency| (iter)
+#               > 0 : write time-average output every multiple of frequency (iter)
+#  levels(:,n) : list of levels to write to file (Notes: declared as REAL)
+#                 when this entry is missing, select all common levels of this list
+#  fields(:,n) : list of diagnostics fields (8.c) (see "available_diagnostics" file 
+#                 for the list of all available diag. in this particular config)
+#--------------------------------------------------------------------
+#
+ &diagnostics_list
+#
+   dumpatlast = .FALSE.,
+###---
+  frequency(1) = -600.0,
+   fields(1:6,1) = 'ETAN    ','SIheff  ','SIhsnow ',
+                   'SIarea  ','sIceLoad','PHIBOT  ',
+   filename(1) = 'diags/budg2d_snap_set1',
+   timePhase(1)= 0.,
+   fileFlags(1) = 'D       ',
+####---
+  frequency(2) = -600.0,
+   fields(1:2,2) = 'THETADR ','SALTDR  ',
+   filename(2) = 'diags/budg3d_snap_set2',
+   timePhase(2)= 0.,
+   fileFlags(2) = 'D       ',
+####---
+#### ltot[T,S]tnd: tendency, the LHS, unit degC/s or psu/s
+#### lgTocQsw: from gT of Qsw (I believe this is the surface total)
+#### locSPtnd: this is the salt fraction (oceSPtnd) that goes into each
+####           depth layer; unit g/s/m2, such that sum(oceSPtnd)=oceSPflx
+#### locQsw3D: heat fraction (oceQsw*swfrac(k)-oceQsw*swfrac(k+1)) goes
+####           into each depth layer; unit J/s/m2, sum(oceQsw3D)=oceQsw
+  frequency(15) = 600.0,
+   fields(1:6,15) = 'ltotTtnd','ltotStnd','lgTocQsw','locSPtnd',
+                    'locQsw3D','ltotEtnd',
+   filename(15) = 'diags/budg3d_tend_layers_set1',
+   fileFlags(15) = 'D       ',
+####---
+  frequency(3) = 600.0,
+   fields(1:7,3) = 'oceFWflx','SIatmFW ','TFLUX   ','SItflux ',
+                   'SFLUX   ','oceQsw  ','oceSPflx',
+#                  'SPforcT1','SPforcS1',
+   filename(3) = 'diags/budg2d_zflux_set1',
+   fileFlags(3) = 'D       ',
+####---
+#### TLFUX: heat flux at rF=0 (k=1, lower edge of vertical, where 
+####        k incr downward); positive is defined in opposite dir
+####        of k, so + upward); unit J/s/m2; inclusive of oceQsw
+#### SFLUX: salt flux at rF=0; unit g/s/m2; EXCLUSIVE of oceSPflx
+  frequency(16) = 600.0,
+   fields(1:2,16) = 'lTFLUX  ','lSFLUX  ',
+   filename(16) = 'diags/budg2d_zflux_layers_set1',
+   fileFlags(16) = 'D       ',
+#####---
+# this one is important because it activates the vertical advection diags
+  frequency(4) = 600.0,
+   fields(1:8,4) ='WTHMASS ','WSLTMASS',
+                   'oceSflux','oceQnet ','SIatmQnt',
+                   'SIaaflux','SIsnPrcp','SIacSubl',
+#'SRELAX  ','TRELAX  ',
+   filename(4) = 'diags/budg2d_zflux_set2',
+   fileFlags(4) = 'D       ',
+#'SIempmr ', SIempmr is identical to minus oceFWflx
+####---
+  frequency(5) = 600.0,
+   fields(1:10,5) = 'ADVr_TH ',
+                    'DFrE_TH ','DFrI_TH ',
+                    'DBgE_TH ','DBgI_TH ',
+                    'DReE_TH ','DReI_TH ',
+                    'KPPg_TH ','DKpE_TH ','DKpI_TH ',
+# 12Dec2023: change FrG (meant for GM) to correct ReE (Redi)
+# In addition, we also now have the copy ReEp to be Helen s
+# diff r of Redi
+#WTHMASS,WSLTMASS  only needed for the 1st layer, not 3d
+#                  'WTHMASS ','WSLTMASS',
+   filename(5) = 'diags/budg3d_zflux_set1',
+   fileFlags(5) = 'D       ',
+####---
+##thse fields have "r" for vert int so just mult with drF
+  frequency(6) = 600.0,
+   fields(1:10,6) = 'ADVr_SLT',
+                    'DFrE_SLT','DFrI_SLT',
+                    'DBgE_SLT','DBgI_SLT',
+                    'DReE_SLT','DReI_SLT',
+                    'KPPg_SLT','DKpE_SLT','DKpI_SLT',
+   filename(6) = 'diags/budg3d_zflux_set2',
+   fileFlags(6) = 'D       ',
+#######---
+#### depth-space diags just passed into layers
+#### "r": vertical; "l" for layers
+#### ADV: adv 
+#### DFrE: explicit, only from GM Kwx and Kwy when implicitDiffusion=T
+#### DFrI: implicit: merged background/kpp plus GM Kwz if implicitDiffusion=T
+#### DReE: the explicit part Redi part inside gad_calc_rhs ONLY for
+####       implicitDiffusion=F. These were interpreted as "explicit" because
+####       of the false above. Given that ASTE has implicitDiffusion=T,
+####       I think the contrib of this "E" part from Kwz is zero (?)
+#### DReI: Redi implicit (from Kwz) if implicitDiffusion=T
+#### DBg[E,I]: background [ex,im]plicit
+#### DKp[E,I]: KPP-only [ex,im]plicit
+#### KPPg = non-local convective adjustment
+####        uses diffusion coefficient of merged KPP/bg, excl Redi in ASTE
+#### FrIE: explicit plus implicit (added INSIDE layers) 
+  frequency(17) = 600.0,
+   fields(1:12,17) = 'lADVr_TH','lADBr_TH',
+                     'lDFrE_TH','lDFrI_TH',
+                     'lDBgE_TH','lDBgI_TH',
+                     'lDReE_TH','lDReI_TH',
+                     'lKPPg_TH','lDKpE_TH',
+                     'lDKpI_TH','lFrIE_TH',
+   filename(17) = 'diags/budg3d_zflux_layers_set1',
+   fileFlags(17) = 'D       ',
+#######---
+  frequency(18) = 600.0,
+   fields(1:12,18) = 'lADVr_SL','lADBr_SL',
+                     'lDFrE_SL','lDFrI_SL',
+                     'lDBgE_SL','lDBgI_SL',
+                     'lDReE_SL','lDReI_SL',
+                     'lKPPg_SL','lDKpE_SL',
+                     'lDKpI_SL','lFrIE_SL',
+   filename(18) = 'diags/budg3d_zflux_layers_set2',
+   fileFlags(18) = 'D       ',
+#######---
+  frequency(7) = 600.0,
+   fields(1:4,7) ='ADVxHEFF','ADVyHEFF',
+                  'ADVxSNOW','ADVySNOW',
+#'DFxEHEFF','DFyEHEFF','DFxESNOW','DFyESNOW',
+   filename(7) = 'diags/budg2d_hflux_set1',
+   fileFlags(7) = 'D       ',
+####---
+  frequency(8) = 600.0,
+   fields(1:10,8) ='UVELMASS','VVELMASS',
+                 'ADVx_TH ','ADVy_TH ','DFxE_TH ','DFyE_TH ',
+                 'ADVx_SLT','ADVy_SLT','DFxE_SLT','DFyE_SLT',
+#the following are not transports but tendencies
+#                 'oceSPtnd','AB_gT   ','AB_gS   ','oceEPtnd',
+   filename(8) = 'diags/budg3d_hflux_set2',
+   fileFlags(8) = 'D       ',
+######---
+#### xyz-space diags just passed into layers
+#### [x,y]: horizontal components; "l": layers
+#### ADV: advective
+#### DF[x,y]E : explicit
+#### DF[x,y]2: harmonic part of explicit
+#### DF[x,y]4: bi-harmonic part of explicit
+#### DF[x,y]G: atn original diags for the Redi part inside
+####           gad_calc_rhs ONLY for implicitDiffusion=.false.,
+####           These were interpreted as "explicit" because of
+####           the false above. HP has changed this name to
+#### DF[x,y]
+####           Because ASTE has .true., we should
+####           not have this, and instead will have DReI.
+  frequency(19) = 600.0,
+   fields(1:6,19) = 'lADVx_TH','lDFxE_TH','lDFx2_TH',
+                    'lDFx4_TH','lDFxG_TH','lADBx_TH',
+   filename(19) = 'diags/budg3d_hflux_layers_set1',
+   fileFlags(19) = 'D       ',
+#######---
+  frequency(20) = 600.0,
+   fields(1:6,20) = 'lADVy_TH','lDFyE_TH','lDFy2_TH',
+                    'lDFy4_TH','lDFyG_TH','lADBy_TH',
+   filename(20) = 'diags/budg3d_hflux_layers_set2',
+   fileFlags(20) = 'D       ',
+#######---
+   frequency(21) = 600.0,
+   fields(1:12,21) = 'lADVx_SL','lDFxE_SL','lDFx2_SL',
+                     'lDFx4_SL','lDFxG_SL','lADBx_SL',
+   filename(21) = 'diags/budg3d_hflux_layers_set3',
+   fileFlags(21) = 'D       ',
+#######---
+   frequency(22) = 600.0,
+   fields(1:12,22) = 'lADVy_SL','lDFyE_SL','lDFy2_SL',
+                     'lDFy4_SL','lDFyG_SL','lADBy_SL',
+   filename(22) = 'diags/budg3d_hflux_layers_set4',
+   fileFlags(22) = 'D       ',
+#######---
+  frequency(9) = 600.0,
+   fields(1:8,9) ='KPPg_TH ','KPPg_SLT',
+                   'TOTTTEND','TOTSTEND',
+                   'oceSPtnd','TOTETEND',
+#not kpp but 3d so put here
+                   'WVELMASS','oceQsw3D',
+#'oceEPtnd',
+   filename(9) = 'diags/budg3d_kpptend_set1',
+   fileFlags(9) = 'D       ',
+#######note: TOT[T,S]TEND are useless unless mult also with hFacC prior to output
+### 18sep2024 for layers i have fixed such that tot[t,s]tend above are what sent into layers
+####note: for what i run, AB_g[T,S] are all zeros, so saving space and not diag
+####                   'AB_gT   ','AB_gS   ',
+###---------------------------------------------------------------
+##---- standard diagnostics:
+######---
+  frequency(10) = 600.0,
+   fields(1:22,10) = 'ETAN    ','SIarea  ','SIheff  ','SIhsnow ',
+#stuff that is not quite state variables (and may not be quite
+#synchroneous) but are added here to reduce number of files
+                 'DETADT2 ','PHIBOT  ','sIceLoad','MXLDEPTH',
+                 'SIatmQnt','SIatmFW ','oceQnet ','oceFWflx',
+                 'oceTAUX ','oceTAUY ',
+                 'ADVxHEFF','ADVyHEFF','ADVxSNOW','ADVySNOW',
+                 'SIuice  ','SIvice  ','ETANSQ  ','oceSPDep',
+#'DFxEHEFF','DFyEHEFF','DFxESNOW','DFyESNOW',
+   filename(10) = 'diags/state_2d_set1',
+###---
+  frequency(11) = 600.0,
+   fields(1:2,11) = 'THETA   ','SALT    ',
+#stuff that is not quite state variables (and may not be quite
+#synchroneous) but are added here to reduce file number
+#                   'DRHODR  ',
+   filename(11) = 'diags/state_3d_set1',
+##---
+  frequency(12) = 600.0,
+   fields(1:2,12) = 'UVELMASS','VVELMASS',
+   filename(12) = 'diags/trsp_3d_set1',
+#   fileFlags(12) = 'D       ',
+##---
+  frequency(13) = 600.0,
+   fields(1:3,13) = 'WVELMASS','GM_PsiX ','GM_PsiY ',
+   filename(13) = 'diags/trsp_3d_set2',
+##   fileFlags(13) = 'D       ',
+##---
+  frequency(14) = 600.0,
+   fields(1:18,14) ='EXFpreci','EXFevap ','EXFroff ','EXFempmr',
+                 'EXFswdn ','EXFlwdn ','EXFswnet','EXFlwnet','EXFqnet ',
+                 'EXFatemp','EXFaqh  ','EXFtaux ','EXFtauy ',
+                 'EXFuwind','EXFvwind','EXFpress','EXFhs   ','EXFhl   ',
+   filename(14) = 'diags/exf_zflux_set1',
+##---
+#
+# HP ADDING DIAGNOSTICS FOR LAYERS PACKAGE
+# SNATCHED FROM AN'S LAYERS ASTE270 RUN ON TACC
+# An outputs everything in T-space, S-space and Sigma-space
+# [LaUH, LaVH] is layer integrated transport (m^2/s)
+# [LaUa, LaVa] is layer averaged [u,v] velocity 
+# [LaHw, LaHs, LaHc ] is layer thickness at [U points (w=west), v points (s=south), tracer points (c=centre)]
+# Ryan's added transformed tendencies:
+# [LaTs, LaTh, LaTz] = layer THETA transform from [sfc forcing, horiz. diff, vert diff]
+# [LTha, LTza, LTto] = layer THETA transform from [horiz. adv, vert adv, total tend]
+# [LaSs, LaSh, LaSz] = as for [LaTs, LaTh, LaTz] but for salt
+# [LSha, LSza, LSto] = as for [LTha, LTza, LTto] but for salt
+# TO BE ABLE TO CONVERT BACK TO DENSITY COORDINATES, NEED TO DUMP SIGMA AT SAME FREQ ON Nr LEVELS...SO BE SURE TO INCLUDE:
+# [LaTr]
+# TO ALL OF THE ABOVE ADD THE EXTENSION 1SLT, 2TH, or 3RHO 
+  frequency(23) = 600.0,
+   fields(1:8,23) = 'LaHw2TH ','LaUH2TH ','LaUa2TH ',
+                    'LaHw1SLT','LaUH1SLT','LaUa1SLT',
+                    'LaHc2TH ','LaHc1SLT',
+   filename(23) = 'diags/layers_3d_U',
+   fileFlags(23) = 'D       ',
+##
+  frequency(24) = 600.0,
+   fields(1:6,24) = 'LaHs2TH ','LaVH2TH ','LaVa2TH ',
+                    'LaHs1SLT','LaVH1SLT','LaVa1SLT',
+   filename(24) = 'diags/layers_3d_V',
+   fileFlags(24) = 'D       ',
+#  
+  frequency(25) = 600.0,
+   fields(1:24,25) = 'LaTs2TH ','LaTh2TH ','LaTz2TH ',
+                     'TzKp2TH ','TzRe2TH ','TzBg2TH ',
+                     'TKpg2TH ','LTha2TH ','LTza2TH ',
+                     'LTBh2TH ','LTBz2TH ',
+                     'LTto2TH ',
+                     'LaTs1SLT','LaTh1SLT','LaTz1SLT',
+                     'TzKp1SLT','TzRe1SLT','TzBg1SLT',
+                     'TKpg1SLT','LTha1SLT','LTza1SLT',
+                     'LTBh1SLT','LTBz1SLT',
+                     'LTto1SLT',
+   filename(25) = 'diags/layers_3d_Ttend',
+   fileFlags(25) = 'D       ',
+#
+  frequency(26) = 600.0,
+  fields(1:24,26) = 'LaSs2TH ','LaSh2TH ','LaSz2TH ',
+                    'SzKp2TH ','SzRe2TH ','SzBg2TH '
+                    'SKpg2TH ','LSha2TH ','LSza2TH ',
+                    'LSBh2TH ','LSBz2TH ',
+                    'LSto2TH ',
+                    'LaSs1SLT','LaSh1SLT','LaSz1SLT',
+                    'SzKp1SLT','SzRe1SLT','SzBg1SLT'
+                    'SKpg1SLT','LSha1SLT','LSza1SLT',
+                    'LSBh1SLT','LSBz1SLT',
+                    'LSto1SLT',
+   filename(26) = 'diags/layers_3d_Stend',
+   fileFlags(26) = 'D       ',
+#######
+##-------------------
+#BIG JOINT SPACE DIAGS
+##-------------------
+  frequency(27) = 600.0,
+  fields(1:4,27) = 'LaHw_TS ','LaUH_TS ','LaUa_TS ','LaHc_TS ',
+   filename(27) = 'diags/layers_TSjoint_U',
+   fileFlags(27) = 'D       ',
+#
+  frequency(28) = 600.0,
+   fields(1:3,28) = 'LaHs_TS ','LaVH_TS ','LaVa_TS ',
+   filename(28) = 'diags/layers_TSjoint_V',
+   fileFlags(28) = 'D       ',
+#
+#surf,diffh,diffz,advh,advz,d/dt
+  frequency(29) = 600.0,
+  fields(1:6,29) = 'LaTs_TS ','LaTh_TS ','LaTz_TS ',
+                   'LTha_TS ','LTza_TS ','LTto_TS ',
+   filename(29) = 'diags/layers_TSjoint_Ttend_set1',
+   fileFlags(29) = 'D       ',
+#
+#decom of diffz: kpp,redi,bg,kppg; bolus_h,bolus_z
+  frequency(30) = 600.0,
+  fields(1:6,30) = 'TzKp_TS ','TzRe_TS ','TzBg_TS ',
+                   'TKpg_TS ','LTBh_TS ','LTBz_TS ',
+   filename(30) = 'diags/layers_TSjoint_Ttend_set2',
+   fileFlags(30) = 'D       ',
+#
+  frequency(31) = 600.0,
+  fields(1:6,31) = 'LaSs_TS ','LaSh_TS ','LaSz_TS ',
+                   'LSha_TS ','LSza_TS ','LSto_TS ', 
+   filename(31) = 'diags/layers_TSjoint_Stend_set1',
+   fileFlags(31) = 'D       ',
+#
+# Parameter for Diagnostics of per level statistics:
+  frequency(32) = 600.0,
+  fields(1:6,32) = 'SzKp_TS ','SzRe_TS ','SzBg_TS ',
+                   'SKpg_TS ','LSBh_TS ','LSBz_TS ',
+   filename(32) = 'diags/layers_TSjoint_Stend_set2',
+   fileFlags(32) = 'D       ',
+#
+ /
+#
+#
+# Parameter for Diagnostics of per level statistics:
+#-----------------
+# for each output-stream:
+#  stat_fname(n) : prefix of the output file name (only 8.c long) for outp.stream n
+#  stat_freq(n):< 0 : write snap-shot output every |stat_freq| seconds
+#               > 0 : write time-average output every stat_freq seconds
+#  stat_phase(n)    : write at time = stat_phase + multiple of |stat_freq|
+#  stat_region(:,n) : list of "regions" (default: 1 region only=global)
+#  stat_fields(:,n) : list of diagnostics fields (8.c) (see "available_diagnostics.log"
+#                 file for the list of all available diag. in this particular config)
+#-----------------
+ &DIAG_STATIS_PARMS
+# diagSt_regMaskFile='basin_masks_eccollc_90x50.bin',
+# nSetRegMskFile=1,
+# set_regMask(1)= 1,  1,  1,  1,  1,  1,  1,  1,  1,
+#                 1,  1,  1,  1,  1,  1,  1,  1
+# val_regMask(1)= 1., 2., 3., 4., 5., 6., 7., 8., 9.,
+#                10.,11.,12.,13.,14.,15.,16.,17.
+##---
+# stat_fields(1,1)= 'ETAN    ','ETANSQ  ','DETADT2 ',
+#                   'UVEL    ','VVEL    ','WVEL    ',
+#                   'THETA   ','SALT    ',
+#    stat_fname(1)= 'dynStDiag',
+#     stat_freq(1)= 3153600.,
+# stat_region(1,1)=  1, 2, 3, 4, 5, 6, 7, 8, 9,
+#                   10,11,12,13,14,15,16,17
+##---
+# stat_fields(1,2)= 'oceTAUX ','oceTAUY ',
+#                   'surForcT','surForcS','TFLUX   ','SFLUX   ',
+#                   'oceQnet ','oceSflux','oceFWflx',
+#    stat_fname(2)= 'surfStDiag',
+#     stat_freq(2)= 3153600.,
+# stat_region(1,2)=  1, 2, 3, 4, 5, 6, 7, 8, 9,
+#                   10,11,12,13,14,15,16,17
+ /

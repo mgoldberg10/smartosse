@@ -1,0 +1,37 @@
+# *********************
+# ECCO controlvariables
+# *********************
+ &ctrl_nml
+ doSinglePrecTapelev=.TRUE.,
+ ctrlUseGen=.TRUE.,
+ doinitxx = .FALSE.,
+ doMainPack = .FALSE.,
+ doMainUnpack = .FALSE.,
+# forcingPrecond=1.,
+ &
+#
+# *********************
+# names for ctrl_pack/unpack
+# *********************
+ &ctrl_packnames
+ &
+#
+# *********************
+# names for CTRL_GENARR, CTRL_GENTIM
+# *********************
+ &CTRL_NML_GENARR
+##
+ xx_gentim2d_weight(5) = 'wUwind_Ev2linearcapsmm9Eb_MezenB.bin',
+ xx_gentim2d_file(5)='xx_uwind',
+ xx_gentim2d_period(5)=1209600.0,
+ mult_gentim2d(5) = 1.,
+ xx_gentim2d_preproc(1,5)='WC01',
+##
+ xx_gentim2d_weight(6) = 'wVwind_Ev2linearcapsmm9Eb_MezenB.bin',
+ xx_gentim2d_file(6)='xx_vwind',
+ xx_gentim2d_period(6)=1209600.0,
+ mult_gentim2d(6) = 1.,
+ xx_gentim2d_preproc(1,6)='WC01',
+##
+ &
+

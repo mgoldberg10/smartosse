@@ -89,10 +89,55 @@ What's here now is genuinely just the driver config — a few KB per family.
 `OPTIM/goldberg_optim_memory_error/` (a nested debug-incident copy of several of the same
 filenames) was left out — redundant with `base/` and not itself provenance for a paper run.
 
+## `code/froman/`
+
+The `code_froman/` code modifications (57 `.F`/`.h` files + `packages.conf`, 543 KB) from the
+build tree, `.../MITgcm_c68v/mysetups/aste_270x450x180/osses/code_froman/`. All 6 kept `jobs/`
+scripts use `whichexp="_froman"`, i.e. this one code directory, so no other `code_*` variant
+(`code_froman_fwd`, `code_froman_year2012`, `code_mon`, `code_phibot*`, `code_c68v`,
+`code_xx_clean`) was needed.
+
+## `namelists/`
+
+**Time-sensitive finding, 2026-09-24**: each run root has a `cleanup.bash` that deletes every
+namelist file (`data`, `data.pkg`, `data.exf`, `data.ecco`, plain `data.ctrl`, …) from `iter*/`
+directories to save space, keeping only files matching `*xx*`/`*bp*`/`costfunction*`/
+`STDOUT.0000`. **It had already been run on `runc68v_froman_partialcables_jraspread`** — the
+single most-referenced run (fig5, fig6, fig10, `gen_gate_caches`, figD1) — before this session:
+4 of its 5 regions (`fullnatl`, `labsea`, `newfoundland`, `northsea`) had already lost their
+namelists; only `subgyre` still had a complete set. The other 6 referenced run families were
+checked and still have theirs intact (not yet pulled into git — see below).
+
+`namelists/partialcables_jraspread/` is organized `base/` (48 files, 272 KB — everything that's
+identical across all 5 regions: `data`, `data.pkg`, `data.exf`, `data.diagnostics`, `data.exch2`
+variants, etc., taken from `subgyre`, the surviving region) plus one directory per region
+(`fullnatl/`, `labsea/`, `newfoundland/`, `northsea/`, `subgyre/`) holding only the two files
+that actually vary: `data.ctrl` (which `xx_gentim2d_weight(8)` — i.e. which atmospheric-pressure
+prior — is active) and `data.ecco` (the `gencost_datafile(1)` cable/sensor identifier, e.g.
+`..._64sensors_labsea`).
+
+**How the 4 cleaned regions were reconstructed, not just copied** — two different techniques,
+chosen because `STDOUT.0000` survives cleanup and MITgcm echoes every namelist it reads into it
+(prefixed `(PID.TID 0000.0001) >`):
+
+- `data.ctrl`: the candidate-value pool (`data.ctrl_dailyxx_multgen*`) also survives cleanup (it
+  matches the `*xx*` keep-rule) — these are the same files the job scripts `cp` into place as
+  `data.ctrl` at submission time. Confirmed via `STDOUT.0000` which one was actually active in
+  each region (all 5 regions turned out to use `data.ctrl_dailyxx_multgen`, i.e. the
+  `wApressure_ASTE270_jra55_jra3q_era_spread.bin` prior — consistent with the run family being
+  named `jraspread`), then copied that exact surviving file — not hand-transcribed from STDOUT.
+- `data.ecco`: no candidate pool survives, so this one *is* reconstructed — `subgyre`'s real
+  `data.ecco` as a template, with only the `gencost_datafile(1)` line substituted to match what
+  `STDOUT.0000` shows for that region (verified this is the *only* line that differs, by diffing
+  the full `ECCO_GENCOST_NML` block STDOUT echoes for all 5 regions before trusting the
+  template-substitution approach). Sensor counts (`142/64/27/41` sensors for
+  `fullnatl/labsea/newfoundland/northsea`) came from `STDOUT.0000` directly, not assumed.
+
 ## Still needed (not done yet)
 
-- `code_froman/` (the ~57 F/h code modifications) and the namelist sets — see ROADMAP.md §5b;
-  not pulled from pfe in this pass (this session only did `jobs/` and `optim/`).
+- Namelists for the other 6 referenced run families (`ib_freq2`, `partialcables_jraspread_spacing`,
+  `partialcables_jrastd_daytoday`, the two `gracellc4320_{sc_spread,spread}` runs) — confirmed
+  intact on pfe, not yet pulled into git.
 - The build recipe is only partially captured: compiler (`ifort 19.1.3.304`) and MPI (HPE MPT
   2.30) versions are known from `genmake.log`, but the optfile name itself hasn't been pinned
   down yet.
