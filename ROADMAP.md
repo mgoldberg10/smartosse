@@ -229,8 +229,13 @@ at TACC. Stampede3 purges scratch, so the copies evaporate; pfe remains the syst
 - **`import smartosse.bp` pulls cartopy and matplotlib too**, via the `from .plot import *`
   chain in `__init__.py`. So the §1 "star imports are ugly" item is not cosmetic — it is the
   thing that makes a lightweight install impossible.
-- **`asteoptim` is an undeclared dependency**, imported by `dataset.py`, `osse.py`,
-  `wind_bp_fw.py`, `slope_cable.py` and listed in neither `setup.py` nor `environment.yml`.
+- ~~`asteoptim` is an undeclared dependency~~ **correction, 2026-09-24**: `dataset.py`/
+  `osse.py` only ever matched this grep via `open_asteoptimdataset` (a function *name*, not
+  an import) — that function is defined locally in `dataset.py`. The one real
+  `from asteoptim.dataset import ...` was in `gen_gate_caches.py`, and it turned out to be
+  an outdated predecessor of this package, not a real external dependency — see §4b below.
+  `wind_bp_fw.py`/`slope_cable.py` weren't re-checked (still untracked, not present on this
+  branch — see §1).
 
 ### Recommended architecture: move the extraction to the data, not the data to the extraction
 
@@ -264,14 +269,34 @@ Three decoupling tasks make that env possible, and all three are things the repo
       lazy `__getattr__`. `from smartosse.bp import BPReader` now pulls none of cartopy,
       matplotlib, cmocean, pyresample or ecco_v4_py. `utils.py`'s module-level matplotlib
       import went local at the same time.
-- [ ] **Break the `ecco_v4_py` dependency out of the extraction path.** Either vendor
-      `get_llc_grid` / `UEVNfromUXVY` (two functions, ECCO is MIT-licensed — check and
-      attribute), or import them lazily inside the functions that call them. This removes the
-      single hardest-to-install package from the pfe-side requirements.
-- [ ] **Declare `asteoptim`** and work out whether it is pip-installable on pfe, vendorable,
-      or needs to be a sibling repo of yours. It is currently an invisible hard requirement.
-- [ ] Then: `environment-extract.yml` (pfe, ~6 packages) alongside `environment.yml` (full,
-      TACC + Docker). CI can test the extract env on plain ubuntu, which it cannot do today.
+- [x] ~~**Break the `ecco_v4_py` dependency out of the extraction path.**~~ done: vendored
+      `get_llc_grid` / `UEVNfromUXVY` into `smartosse/llc_grid.py` (MIT, attributed, copied
+      from `ecco_v4_py` 1.6.0 — both functions only ever needed numpy/xarray/xgcm; the
+      cartopy/matplotlib/shapely/pyproj pull was `ecco_v4_py`'s own `__init__.py`, not
+      these two functions). `osse.py` and `figures/gen_gate_caches.py` now import from
+      `.llc_grid` instead. `osse.py`'s `_plot_skill` also gained local `from .plot import
+      spna` / `from .cmaps import Colormaps` (were module-level, so importing `osse.py`
+      for `NatureRun`/`ForecastModel`/`OSSE` — as every `gen_*.py` cache builder does —
+      silently pulled the whole plotting stack in anyway). Same fix applied to `patm.py`'s
+      module-level `matplotlib.pyplot` (moved local to `plot_jra_vs_aste_cable_variability`,
+      the one function that needs it) after it turned out `gen_patm_uncertainty_fields.py`
+      imports `patm.load_forcing_generic` and was tripping over it. One more found the same
+      way: `gen_appendixB_skill_cache.py` imported three path constants from
+      `fig9_patm_unc.py` — a plotting module — for no other reason; those three are now
+      duplicated locally there (a comment says to keep them in sync) rather than editing
+      `fig9_patm_unc.py` itself, per the "don't touch figure modules mid-review" risk below.
+      **`asteoptim` turned out not to need declaring at all** — its one call site
+      (`gen_gate_caches.py`'s `from asteoptim.dataset import open_astedataset,
+      open_asteoptimdataset`) was pointed at an outdated predecessor of this very package;
+      swapped for `smartosse.dataset`'s own (signature-compatible) versions. Same for
+      `smartcables`, elsewhere flagged as a wildcard-import smell — also an outdated
+      predecessor, not a real dependency.
+      **Verified** (`use-extract` env on pfe, 2026-09-24): all four `gen_*.py` cache
+      builders import clean with zero `cartopy`/`matplotlib`/`ecco_v4_py`/`cmocean`/
+      `pyresample` in `sys.modules` afterward, and `pytest tests/ -q` still 2 passed.
+- [x] ~~Then: `environment-extract.yml`~~ existed already; added `xgcm` + `future` (both
+      light — xgcm depends on nothing but xarray/dask/numpy/future) for `llc_grid.py`, and
+      installed them into the live `/home3/mgoldbe1/envs/extract` env. CI-on-ubuntu still open.
 
 ### The config file: key on *site*, not on machine-type branching in code
 

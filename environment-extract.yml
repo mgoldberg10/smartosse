@@ -5,6 +5,10 @@
 # cartopy, matplotlib, pyresample, esmpy or ecco_v4_py -- all plotting happens
 # on TACC. See "Why" below before adding to this list.
 #
+# xgcm is here because smartosse.llc_grid (get_llc_grid/UEVNfromUXVY, vendored
+# from ecco_v4_py -- see that module's docstring) needs it; xgcm itself only
+# depends on xarray/dask/numpy/future, so it costs nothing cartopy-shaped.
+#
 # ---------------------------------------------------------------------------
 # WHERE THIS MUST LIVE:  /home3/mgoldbe1/envs/extract   (home3, NFS)
 #                        NOT on /nobackupp27 (Lustre).
@@ -62,9 +66,18 @@
 #   the cartopy/matplotlib/ecco_v4_py/cmocean/pyresample leak check    -> []  (empty)
 # All three hold because of the PEP 562 lazy __getattr__ rewrite of
 # smartosse/__init__.py (ee84bf4) and utils.py's matplotlib import going local
-# in the same commit. See docs/pfe-brief.md for what still doesn't hold:
-# osse.py (ecco_v4_py) and patm.py (matplotlib, found in this session) still
-# import their heavy deps at module level.
+# in the same commit.
+#
+# UPDATE, same day: osse.py's module-level ecco_v4_py import is now
+# smartosse/llc_grid.py (vendored, xgcm-only -- see that module); patm.py's
+# module-level `import matplotlib.pyplot` moved local to the one function
+# that plots; gen_gate_caches.py's `from asteoptim...` (an old predecessor
+# of this package) now reads from smartosse.dataset instead, and its
+# ecco_v4_py imports also point at llc_grid; gen_appendixB_skill_cache.py no
+# longer imports fig9_patm_unc.py (a plotting module) just for three path
+# constants -- they're duplicated locally instead. All four gen_*.py cache
+# builders should now import clean in this env -- re-verify the leak check
+# above against each of them once xgcm is installed here.
 
 name: extract
 channels:
@@ -80,6 +93,8 @@ dependencies:
   - dask-core=2026.8.0     # NOT `dask` -- see note above
   - cachetools=7.2.0       # required by xmitgcm.file_utils
   - tabulate=0.10.0        # required by smartosse.bp
+  - xgcm                   # required by smartosse.llc_grid (get_llc_grid/UEVNfromUXVY)
+  - future                 # xgcm's own only non-numpy/xarray/dask dependency
   - pytest=9.1.1           # dev-only, for tests/ -- see note above
   - pip=26.2.1
   # transitive pins worth recording (set by the solver, listed for reproducibility)

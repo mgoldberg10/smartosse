@@ -50,7 +50,17 @@ import xarray as xr
 
 from ..utils import read_aste_bin
 from ..osse import NatureRun, ForecastModel, OSSE, _compute_skill
-from .fig9_patm_unc import REGIONS, RUN_DIR_ROOT_STD, RUN_DIR_ROOT_SPREAD
+
+# Duplicated from fig9_patm_unc.py rather than imported: that module is a
+# plotting module (matplotlib/cartopy at module level), and this script is
+# meant to run in the extraction-only pfe environment, which has neither
+# (see ROADMAP.md §4b, environment-extract.yml). These three are plain
+# path/list constants -- keep them in sync with fig9_patm_unc.py by hand if
+# either changes.
+REGIONS = ['labsea', 'subgyre', 'northsea', 'newfoundland']
+EXT = '_daytoday'
+RUN_DIR_ROOT_STD = f'/scratch/08381/goldberg/aste_270x450x180/osses/runc68v_froman_partialcables_jrastd{EXT}/201201/'
+RUN_DIR_ROOT_SPREAD = '/scratch/08381/goldberg/aste_270x450x180/osses/runc68v_froman_partialcables_jraspread/201201/'
 
 # The barotropic-velocity nature run (ASTE-tiled U_bt.nc/V_bt.nc). NatureRun's
 # own default nr_dir is the phibot_daily directory, which has no *_bt.nc.

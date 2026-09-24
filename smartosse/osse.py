@@ -4,12 +4,9 @@ import numpy as np
 import os
 import glob
 import xarray as xr
-from ecco_v4_py.ecco_utils import get_llc_grid
-from ecco_v4_py.vector_calc import UEVNfromUXVY
+from .llc_grid import get_llc_grid, UEVNfromUXVY
 from .bp import BPReader
 from .dataset import *
-from .plot import spna
-from .cmaps import *
 
 aste_tiles = [1, 2, 6, 7, 10, 11]
 
@@ -379,6 +376,8 @@ def _plot_skill(osse, vmax_default=0.01, ao_kwargs=None, threshold_skill=None,
     import matplotlib.pyplot as plt
     import cmocean
     import cartopy.crs as ccrs
+    from .plot import spna
+    from .cmaps import Colormaps
 
     if ao_kwargs is None:
         ao_kwargs = {}

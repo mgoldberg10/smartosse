@@ -40,10 +40,8 @@ import numpy as np
 import xarray as xr
 import pandas as pd
 
-from ecco_v4_py.ecco_utils import get_llc_grid
-from ecco_v4_py.vector_calc import UEVNfromUXVY
-
-from asteoptim.dataset import open_astedataset, open_asteoptimdataset
+from ..llc_grid import get_llc_grid, UEVNfromUXVY
+from ..dataset import open_astedataset, open_asteoptimdataset
 
 warnings.filterwarnings("ignore")
 
