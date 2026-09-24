@@ -73,7 +73,8 @@ were force-added past it.
     exploration is not a weakness, showing it *undifferentiated from the final figures* is.
   - *Delete outright* — `.fig7_skeleton.py.swp` (a stray vim swapfile, currently tracked-adjacent),
     `fig9_patm_unc.py.pre_2x2_redesign` (**currently tracked** — git is the backup, this
-    file is the anti-pattern an interviewer will notice).
+    file is the anti-pattern an interviewer will notice). `debug_panel_c.py` is already
+    gone (`914fb69`) — it was a Jupyter paste-buffer whose IPython magics were an E999.
 - [ ] Untracked core modules: `curl.py` (48 lines), `plot_new.py` (581), `slope_cable.py` (329),
       `wind_bp_fw.py` (526). ~1500 lines of real code invisible to git. Track or cut, but decide.
       Note `plot.py` (23 KB) and `plot_new.py` (20 KB) coexisting is a smell — resolve or rename.
@@ -82,8 +83,8 @@ were force-added past it.
 - [ ] Decide on `smartosse/tex/` (the full manuscript source, currently untracked). Options:
       keep it out entirely until acceptance; a private sibling repo; or a `paper/` dir added
       at acceptance. **Recommend: leave it out for now**, revisit post-review.
-- [ ] `smartosse/__init__.py` is six `from .x import *` lines. Replace with explicit
-      `__all__` / named imports — it is a 30-second fix and it is the first file anyone opens.
+- [x] ~~`smartosse/__init__.py` six `from .x import *` lines~~ done (`ee84bf4`). Not a
+      30-second cosmetic fix as originally filed — it was the blocker for both CI and pfe.
 - [ ] Scrub the public tree for the TACC account number (`08381`) and personal absolute paths.
 - [ ] `LICENSE` file — there is none. `setup.py` says `license=''` and `keywords='MIT License'`
       (the license got typed into the keywords field). Pick one and add the file.
@@ -106,8 +107,8 @@ asserts `"Found 33 sensors"` while the run printed `Found 5400 sensors`, because
 deterministic fixture is being overwritten but the `bad_vals` default now also excludes
 `-9999.`. Expect to re-derive the expected arrays.
 
-- [ ] Fix `test_bp.py` (`bad_val` → `bad_vals`, re-derive the sensor assertions)
-- [ ] `bad_vals=[0., -9999.]` is a **mutable default argument** — fix while you are in there
+- [x] ~~Fix `test_bp.py`~~ done (`90cfaad`). The sensor assertions did **not** need re-deriving.
+- [x] ~~Mutable default argument~~ done (`90cfaad`), now a tuple.
 - [ ] The library prints debug output on every call — 14 `print()` in `bp.py`, 13 in `osse.py`.
       Test output is a wall of `/tmp/pytest-of-goldberg/...` paths and dimension tuples.
       Convert to `logging` with a module logger. High visual payoff for low effort.
@@ -124,7 +125,10 @@ deterministic fixture is being overwritten but the `bad_vals` default now also e
   - the cache merge/reuse logic (`combine_first` path) described in `STATUS.md` — that is
     real logic with real edge cases
   - a smoke test that every tracked figure module imports cleanly
-- [ ] Fix CI (`.github/workflows/python-tests.yml`). It pip-installs a *partial* dependency
+- [x] ~~CI's light dep set could not import the package~~ fixed at the source (`ee84bf4`): the
+      suite now passes with cartopy/cmocean/ecco_v4_py/matplotlib/pyresample blocked, so the
+      existing pip line suffices. The flake8 step blocked separately and is fixed in `914fb69`.
+- [ ] Still open on CI (`.github/workflows/python-tests.yml`): it pip-installs a *partial* dependency
       set (no `cartopy`, no `ecco_v4_py`, no `matplotlib`) — so it cannot currently import
       most of the package. Either install the full env (conda/micromamba action) or mark the
       map-plotting tests as optional and keep CI to the pure-Python core.
@@ -256,8 +260,10 @@ Call it a half-day.
 
 Three decoupling tasks make that env possible, and all three are things the repo wants anyway:
 
-- [ ] **Stop `__init__.py` importing the plotting stack.** Explicit imports, or lazy
-      `__getattr__`. Until this is done, nothing can import `smartosse` without cartopy.
+- [x] ~~**Stop `__init__.py` importing the plotting stack.**~~ done (`ee84bf4`), via PEP 562
+      lazy `__getattr__`. `from smartosse.bp import BPReader` now pulls none of cartopy,
+      matplotlib, cmocean, pyresample or ecco_v4_py. `utils.py`'s module-level matplotlib
+      import went local at the same time.
 - [ ] **Break the `ecco_v4_py` dependency out of the extraction path.** Either vendor
       `get_llc_grid` / `UEVNfromUXVY` (two functions, ECCO is MIT-licensed — check and
       attribute), or import them lazily inside the functions that call them. This removes the
