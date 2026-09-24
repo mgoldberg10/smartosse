@@ -55,9 +55,10 @@ remaining script uses the same tile decomposition — check each before assuming
 
 ## `optim/`
 
-The ECCO `optim` driver configuration for each experiment family's adjoint iterations —
-`data.optim`, `data.ctrl`, `reset.bash`, `Makefile`, cost-function/output logs. Directory names
-map to the pfe source as:
+The ECCO `optim` driver *configuration* for each experiment family's adjoint iterations —
+`data.optim` (m1qn3 solver settings: `numiter`, `nupdate`, `coldstart`, …), `data.ctrl` (ECCO
+control-vector naming convention, identical across families), `reset.bash`, and `Makefile`
+(where present) for `optim.x`. Directory names map to the pfe source as:
 
 | here | pfe (`osses/`) |
 |---|---|
@@ -68,11 +69,22 @@ map to the pfe source as:
 | `fullyear/` | `OPTIM_fullyear/` |
 | `subgyre/` | `OPTIM_subgyre/` |
 
-**Deliberately excluded**: the per-iteration state binaries that live alongside this config on
-pfe — `ecco_ctrl_MIT_CE_000.optNNNN`, `ecco_cost_MIT_CE_000.optNNNN`, `OPWARM.optNNNN` (hundreds
-of MB to 8 GB *each*) — and the compiled `optim.x`/`optim_debug.x` executables (rebuildable from
-this config + `code_froman/` with the compiler/flags in `genmake.log`, not committed as binaries).
-Each pfe `OPTIM*/` directory is 3–70 GB in total; what's here is the <1 MB config slice of it.
+**Deliberately excluded**, two categories:
+
+1. *Too big to commit*: the per-iteration state binaries that live alongside this config on
+   pfe — `ecco_ctrl_MIT_CE_000.optNNNN`, `ecco_cost_MIT_CE_000.optNNNN`, `OPWARM.optNNNN`
+   (hundreds of MB to 8 GB *each*) — and the compiled `optim.x`/`optim_debug.x` executables
+   (rebuildable from this config + `code_froman/` with the compiler/flags in `genmake.log`, not
+   committed as binaries). Each pfe `OPTIM*/` directory is 3–70 GB in total.
+2. *Run-instance operational artifacts, not configuration* (pruned 2026-09-24, Matt's call):
+   `costfunctionNNNN` (one iteration's cost value), `m1qn3_output.txt`/`optim.out`/
+   `optim_c68v.out`/`output_optim_itNNNN.txt`/`stdout` (solver/run logs), `data.optim_bk` (a
+   stray backup of `data.optim`), and the small `OPWARM.optNNNN` stub files that happened to be
+   under the 1 MB filter in a few families — these document *that a particular run happened*,
+   not *how the optim driver is configured*, so they're not useful to a reader trying to
+   understand or reproduce the setup. Still in git history if ever wanted back.
+
+What's here now is genuinely just the driver config — a few KB per family.
 
 `OPTIM/goldberg_optim_memory_error/` (a nested debug-incident copy of several of the same
 filenames) was left out — redundant with `base/` and not itself provenance for a paper run.
