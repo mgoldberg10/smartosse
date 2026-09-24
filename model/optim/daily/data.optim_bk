@@ -1,0 +1,11 @@
+          &OPTIM
+          optimcycle=0,
+          numiter=10,
+          nfunc=9,
+          fmin=7.083942684729e+12,
+          iprint=10,
+          nupdate=4,
+          /
+          &M1QN3
+          coldstart = .TRUE.,
+          /

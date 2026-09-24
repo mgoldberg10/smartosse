@@ -1,0 +1,39 @@
+ -------------------------------------------------------------------------------
+ M1QN3 Copyright (C) 2008, J. Ch. Gilbert, Cl. Lemarechal.
+ -------------------------------------------------------------------------------
+ This program comes with ABSOLUTELY NO WARRANTY. This is free software, and you
+ are welcome to redistribute it under certain conditions. See the file COPYING 
+ in the root directory of the M1QN3 distribution for details.
+ -------------------------------------------------------------------------------
+
+ M1QN3 (Version 3.3, October 2009): entry point
+     dimension of the problem (n):      38706096
+     absolute precision on x (dxmin):          1.00D-06
+     expected decrease for f (df1):            1.27D+12
+     relative precision on g (epsg):           1.00D-06 (two-norm)
+     maximal number of iterations (niter):    10
+     maximal number of simulations (nsim):    90
+     printing level (impres):                 10
+     reverse communication
+
+ m1qn3: Diagonal Initial Scaling mode
+
+     allocated memory (ndz) :464473156
+     used memory :           464473156
+     number of updates :             4
+     (y,s) pairs are stored in core memory
+
+ m1qn3: cold start
+
+     f             =  2.54287265D+13
+     two-norm of g =  6.50012112D+11
+
+ m1qn3a: descent direction -g: precon =  0.602D-11
+
+ -------------------------------------------------------------------------------
+
+ m1qn3: iter 1, simul 1, f= 2.54287265D+13, h'(0)=-2.54287D+12
+
+ m1qn3: line search
+
+     mlis3       fpn=-2.543D+12 d2= 1.53D+01  tmin= 4.78D-06 tmax= 1.00D+20

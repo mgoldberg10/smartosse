@@ -124,8 +124,8 @@ do not `git add` this wholesale).
       `walltime=10:00:00`, `nprocs=580`, `snx=18 sny=18` (tile decomposition — matches the
       `18x18x580` `data.exch2` variant ROADMAP §5b already flagged as needing identification).
       All 16 source a shared `run_logic.sh` (hang-detection wrapper around `mpiexec` — checks
-      for a stall on `dyG` and kills/restarts). **Trivial to copy** — ready for `model/jobs/`
-      whenever you want it done, not done yet per "don't move anything" above.
+      for a stall on `dyG` and kills/restarts). **Copied**, this session — see `model/jobs/`
+      and `model/README.md`.
 - [ ] Nature-run extraction pipeline — **deprioritized, manual intervention needed** (per
       Matt, 2026-09-24). Not inventoried.
 - [ ] llc4320 handling — **deprioritized, manual intervention needed** (same). Not inventoried.
@@ -135,8 +135,11 @@ do not `git add` this wholesale).
       mixed in with huge per-iteration state dumps: `data.optim`, `data.ctrl`, `Makefile`,
       `optim.x` (the m1qn3-linked binary), `reset.bash` are all <10 KB each; the bulk of each
       directory's size is `ecco_ctrl_MIT_CE_000.optNNNN` / `OPWARM.optNNNN` per-iteration
-      pickup/control-vector binaries (hundreds of MB–8 GB *each*) — **do not bring these
-      back**, only the small config files.
+      pickup/control-vector binaries (hundreds of MB–8 GB *each*) — **not brought back**,
+      only the small config files. **Copied**, this session — see `model/optim/` and
+      `model/README.md` for the directory-name mapping. `optim.x`/`optim_debug.x` (the
+      compiled binaries) also deliberately excluded, rebuildable from `genmake.log`'s
+      compiler/flags + `code_froman/` (not yet pulled).
 - [x] **Build recipe, partial** — `build_froman/genmake.log` + `taf_ad.log` present
       (compiler: `ifort (IFORT) 19.1.3.304`, flags include `-convert big_endian
       -assume byterecl ... -axCORE-AVX2 -xSSE4.2 -traceback -ftz`, MPI: HPE MPT 2.30).
