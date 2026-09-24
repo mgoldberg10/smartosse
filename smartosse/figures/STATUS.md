@@ -1,3 +1,574 @@
+# Sensor-spacing sweep (`sensor_spacing_skill_diff.py`)
+
+## 2026-08-19: new module -- pairwise p_b skill differences, 70/140/210 km
+
+Port of `smart_cables/osse/fullnatl_nthsensors.ipynb` cells 22/24/25
+(`sensor_spacing_pb_skill_70_140_210_diff.png`) onto this package's
+conventions, pointed at the **new** sweep
+`runc68v_froman_partialcables_jraspread_spacing/201201/`, which today holds
+`70km/` and `140km/` at 10 iterations and no `210km/` yet. Writes
+`output/sensor_spacing_pb_skill_70_140_210_diff.{png,pdf}` and the cache
+`data/sensor_spacing_skill.nc`.
+
+- **Built to be finished later.** `build_cache` computes whatever spacings are
+  on disk and merges into the cache (`combine_first`, as in
+  `gen_appendixB_skill_cache`); a spacing already cached is *reused*, not
+  recomputed. `make_fig` draws any panel whose two spacings are both cached and
+  leaves the others as empty decorated maps, announcing which. So today: panel
+  (a) = 70-140, (b) and (c) blank. When 210 km arrives, drop it in as `210km/`
+  (glob is `{spacing}km*`, so the notebook's `210km_71sensors_fullnatl` naming
+  works too) and re-run `--rebuild`; only 210 km is computed. Exercised
+  end-to-end before shipping by symlinking `140km/` in as a fake `210km/`:
+  all three panels rendered, (c) came out identically zero, and only the fake
+  spacing was recomputed.
+- **`70km/iter0000/` has no `m_bpday`** (only `adm_bpday`), so the 70 km run
+  has no first guess of its own to divide by. Iteration 0 is the unassimilated
+  forward run, so it is taken from another run -- `140km/iter0000` today, else
+  `runc68v_froman_partialcables_jraspread/201201/fullnatl` -- and the
+  substitution is printed every time. **This is measured, not assumed**:
+  `140km/iter0000/m_bpday` is bit-identical (`max|dp_b| = 0.0`) to that of the
+  full-cable `..._jraspread/201201/fullnatl` run, i.e. a completely different
+  observing system on the same base config. `check_first_guesses` re-runs that
+  comparison over every available donor on each `--rebuild`.
+- **`BPReader` bypassed** (`gen_appendixB_skill_cache.load_bp_anom` reused
+  directly) -- these directories ship no `data.ecco`, same situation and same
+  workaround as `smart_grace_mo_skill` / `fig3_bp_std`.
+- **Both 2026-08-14 rendering bugs avoided from the start**: saved
+  `facecolor='white', edgecolor='none'` (not `transparent=True`, which speckles
+  the coastlines black on a dark ground) and `patch_pdf_indexed_image_bitdepth()`
+  called in `__main__` (required because the `contourf` fills are rasterized on
+  matplotlib 3.4.3, else the PDF opens as though unfinished). Verified after
+  writing: PNG alpha == 255 everywhere, and both image streams in the PDF
+  unfilter to exactly their expected byte counts.
+  **`smart_grace_mo_skill.py` had both of these bugs and is now fixed the same
+  way** -- it rasterizes and was still saving `transparent=True`.
+- **No cable scatter**, as in the notebook: each panel differences two
+  *different* sensor layouts, so there is no single one to draw. Layouts belong
+  in the companion `sensor_spacing_pb_skill_70_140_210.png` (cell 19).
+- **Panel titles off by default** (Matt, 2026-08-19); `--titles` writes
+  `S(p_b^{70 km}) - S(p_b^{140 km})` over each panel.
+- First numbers, wet points, whole ASTE domain: 70-140 has mean `-0.0073`,
+  median `-0.0085`, 18% of wet points favouring 70 km -- i.e. **the 140 km
+  cable scores better over most of the domain**, in the same direction as the
+  notebook's "fewer sensors better!" note on the old sweep, but this time
+  without that sweep's `xx_apressure` confound.
+
+# Fig. 10 (p_atm mechanism, `fig:misfit_and_apressure`)
+
+## 2026-08-17 (latest+1): spreadsigma variant tightened
+
+`make_fig10` gained `hspace`/`wspace` kwargs (were hardcoded 0.3/0.15) and
+`--figsize`/`--hspace`/`--wspace` CLI flags. Defaults unchanged.
+
+`fig10_patm_mechanism_abcd_spread_spreadsigma.{png,pdf}` re-rendered at
+**`--figsize 11 8.0 --hspace 0.02 --wspace 0.02`**. Note the figure *height* is
+the main lever, not `hspace`: the maps are equal-aspect and fill the cell
+width, so any leftover cell height shows up as whitespace above and below each
+map no matter how small `hspace` gets. 10 -> 8 in removes most of it. Picked by
+rendering four combos side by side at low dpi
+(`hspace/wspace/height` = 0.05/0.05/8.6, 0.02/0.02/8.0, 0.10/0.08/9.0,
+0.0/0.0/7.8); 7.8 with zero spacing puts the row-1 colorbar tick labels
+uncomfortably close to the row-2 panel borders, so 8.0/0.02 is the pick. The
+residual row gap is the colorbar band itself -- shrinking it further needs
+`cbar_height_frac`/`cbar_y_shift_frac`, not the gridspec.
+
+Only the spreadsigma file was redone, per the ask;
+`fig10_patm_mechanism_abcd_spread.{png,pdf}` is still at the (11, 10) /
+0.3 / 0.15 geometry.
+
+## 2026-08-17 (latest): spread (a)-(d) re-rendered -- 2-decimal colorbar ticks,
+## no middle tick on (d), perimeter-only lat/lon ticklabels
+
+Three of Matt's asks on `fig10_patm_mechanism_abcd_spread`, all now kwargs
+rather than one-off edits, and all defaulting to the previous behavior so
+nothing else re-renders differently:
+
+- **`style_colorbar(..., decimals=N)`** (figs_utils) fixes tick-label
+  precision: `decimals=2` gives `-0.50 / 0 / 0.50` on (c) and `-0.01 / 0 /
+  0.01` on (a)/(b) instead of `%g`'s ragged `-0.5`. Zero stays a plain `0`
+  (both the module's existing convention and the notebook's) -- say so if you
+  want `0.00` there instead, it is one line. `make_fig10(cbar_decimals=...)` /
+  `--cbar-decimals` pass it through to every colorbar at once.
+- **(d)'s middle tick dropped** by passing `--ratio-cbar-ticks 0 0.05` (two
+  ticks) to the `ratio_cbar_ticks` kwarg added in the previous entry -- no new
+  machinery needed. vmax stays the notebook's 0.051, so the `0.05` label sits a
+  hair inside the bar's end, exactly as in the reference PNG.
+- **`gl_labels='perimeter'`** (`--gl-labels perimeter`) drops interior lat/lon
+  ticklabels: (a) latitudes only, (b) none, (c) both, (d) longitudes only. This
+  is the original notebook's cell-11 framing (`ig % 2` / `ig < 2` label loop),
+  reimplemented through `spna`'s `gl_label_args` rather than by walking
+  `gl._labels` after the fact. `_gl_label_args` gained a `hide_left` switch
+  alongside `hide_bottom`. **Restricted to `panels='abcd'`** (raises otherwise):
+  the 3x2 has no unambiguous perimeter, since (c)'s bottom edge is interior to
+  a row whose left panel is the plain-axes IB scatter. Default stays `'all'`,
+  so `fig10_patm_mechanism_abcd.{png,pdf}` keeps matching the published 3x2's
+  every-panel framing.
+
+Both spread renders were redone with all three (the spread-sigma variant too,
+so the pair stays comparable; its (d) ticks are `0 0.15`):
+`output/fig10_patm_mechanism_abcd_spread{,_spreadsigma}.{png,pdf}`. PDFs
+checked clean (no sub-8-bpc indexed images, EOF intact).
+
+## 2026-08-17 (later): (a)-(d) for the SPREAD-prior run, colorbar limits taken
+## from the notebook -- and what the ratio panel's denominator actually is
+
+Matt asked for the (a)-(d) subset regenerated for the **spread-based** p_atm
+uncertainty (as opposed to std / day-to-day), with the colorbar limits read off
+the notebook cell that produced
+`apressure_variability/subgyre_wmisfit_apressure_SPREAD_jan012012_opt0_opt20_ONLY_stdUncRatio.png`
+(`~/smart_cables/osse/fig10_subgyre_pb_misfit_patm_adjustments.ipynb`, cells
+1/4/6/11/14).
+
+**Config that reproduces that PNG** (cell 11 + cells 1/4/6):
+
+| piece | value |
+| --- | --- |
+| run | `runc68v_froman_partialcables_jraspread/201201/subgyre/`, iters 0/20 (intact on /scratch, own `data.ecco`, no fallback needed) |
+| knots | `xx_apressure.effective`, iters **1 and 20** (both present here) |
+| (a)/(b) `vmax_misfit` | 0.01 (same as the std figure) |
+| (c) `vmax_ctrl` | **0.5 hPa** (vs. 4 hPa for the std run -- the spread run's iter-20 knots only reach -37/+83 Pa, i.e. -0.37/+0.16 hPa on the plotted day) |
+| (d) `vmax_ratio` | **0.051**, with explicit ticks `[0, 0.025, 0.05]` |
+| (d) sigma | `wApressure_ASTE270_EXFpress_std_new.bin` -- the **std** prior, see below |
+
+New in the module for this: `--vmax-misfit` / `--vmax-ctrl` / `--vmax-ratio` /
+`--ratio-cbar-ticks` CLI flags and a `ratio_cbar_ticks` kwarg on `make_fig10`
+(wired into `style_colorbar`'s `ticks` for (d), exactly like the existing
+`eta_skill_cbar_ticks` for (f)). The explicit ticks are needed because
+style_colorbar's default 3 evenly spaced ticks over (0, 0.051) label the middle
+one `0.0255`.
+
+### The ratio panel divides the SPREAD run's adjustments by the STD sigma
+
+Notebook cell 1 reads `spread = True` -> `wApressure_ASTE270_EXFpress_std_new.bin`,
+i.e. the if/else branches are swapped relative to the flag name, so the figure
+that is *named* SPREAD uses the **std** sigma as the denominator. That is not a
+transcription slip on my part and it is not obviously a slip on the notebook's
+either -- the saved filename says `stdUncRatio`, and it is what the pixels show:
+rendering both candidates at vmax=0.051, the std sigma reproduces the reference
+PNG's panel (d) (broad grey field, dark ridge hugging the SE Greenland coast,
+light lobe over the cable) while the spread sigma saturates solid black over the
+whole subpolar basin. Field maxima for the spread run's `std(dp_atm)`:
+
+* / `EXFpress_std_new.bin` (std prior, sigma mean 164 Pa): **max 0.084**, median 0.0035 -- vmax 0.051 clips the peak slightly, the same kind of deliberate under-tuning as the vmax=0.11-vs-0.575 case noted in the module docstring.
+* / `jra55_jra3q_era_spread.bin` (spread prior, sigma mean 1448 Pa): max 0.148, median ~0.
+* / `jra2012_daytoday_std.bin` (the unit-bug file): max 3.47 -- irrelevant here, listed only for scale.
+
+Both renders are in `output/`:
+
+* **`fig10_patm_mechanism_abcd_spread.{png,pdf}`** -- reproduces panels (a)-(d) of the notebook's
+  SPREAD reference PNG (verified by eye against it:
+  same misfit dipole, same +-0.5 hPa lobes, same grey ratio field including the
+  East Greenland coastal ridge). Use this if the point of (d) is "how big are
+  the spread run's adjustments compared with the *std* prior".
+* **`fig10_patm_mechanism_abcd_spread_spreadsigma.{png,pdf}`** -- same
+  everything, but (d) divides by the spread prior the run actually used, at
+  `--vmax-ratio 0.15 --ratio-cbar-ticks 0 0.075 0.15`. Panel (d) becomes a
+  clean cable-centered blob peaking at ~15% with no coastal ridge. This is the
+  self-consistent reading of "adjustments stay within a fraction of the assumed
+  uncertainty" for a spread-prior run, and is probably what controls.tex wants
+  if the spread figure is the one that ships -- Matt's call, not made here.
+
+Panel (d) keeps the module's `nlev=27` (26 contour levels) rather than the
+notebook's `nlev=20` for that panel; only the color limits were changed, per
+the ask. The `BPReader.get_cost()` `'dim_0'` print appears here too and still
+affects nothing.
+
+## 2026-08-17: `--panels abcd` (top 2x2 only) + a `__main__`, and the module's
+## defaults have drifted onto the mis-weighted day-to-day run
+
+Matt asked for an option to render only panels (a)-(d) and for both a PNG and a
+PDF of it. Three changes to `fig10_patm_mechanism.py`, plus one finding that
+matters more than the layout work.
+
+- **`make_fig10(..., panels='abcd')`** builds the top 2x2 and skips the eta OSSE
+  load entirely (`load_eta_osse`/`compute_ib_scatter` are now inside an
+  `if 'e' in panels or 'f' in panels`), so the subset needs neither the eta
+  nature run nor the ~minutes-long xmitgcm read. `PANEL_SETS` holds the two
+  supported sets (`'abcd'`, `'abcdef'`) and their default figsizes; anything
+  else raises. Panel content and styling go through the identical code path --
+  the only deliberate layout difference is that **(d) keeps its bottom
+  longitude labels** (the 3x2 hides them only because (f) sits under it).
+  `figsize` defaults to `(11, 10)` for the subset, i.e. exactly 2/3 of the
+  3x2's `(11, 15)` at the same `hspace=0.3`, so the two rows are proportioned
+  and spaced exactly as rows 1-2 of the full figure. That inherits the full
+  figure's fairly generous inter-row gap; pass e.g. `figsize=(11, 8.5)` to
+  tighten it, at the cost of no longer matching the 3x2's proportions.
+- **`__main__` added** (the module had none -- previous renders were one-off
+  scripts, see the 2026-07-13 entries): `python -m
+  smartosse.figures.fig10_patm_mechanism [--panels abcd]`, same
+  `use_latex_times()` + `use_embedded_pdf_fonts()` +
+  `patch_pdf_indexed_image_bitdepth()` + opaque-white-savefig recipe as
+  `fig5_misfit_rmse_skill`. Writes `output/fig10_patm_mechanism{,_<panels>}.{png,pdf}`.
+  New flags: `--run-dir`, `--sigma-file`, `--patm-iternums`, `--out-name`.
+- **Two data-availability workarounds**, both new since the July render:
+  `load_bp_misfit_maps` now falls back to `BP_SIGMA_FILE` (the canonical /work
+  copy of `bp_var_day_coarse4320_detide16constituent_std_cm`, md5
+  `c2894df2...`, verified byte-identical to the run-local copies that survive
+  under `BADrunc68v_.../`, and the same file for every region) when the run
+  directory has no `data.ecco`, by stubbing `BPReader.read_weight` for the
+  construction and attaching `sigma`/`weight` afterwards -- same purge
+  workaround, same reason, as `fig3_bp_std.load_cable_sensor_lonlat`. And
+  `make_fig10` gained `patm_iternums` because `iter0001` (the module's default
+  first knot iteration) is gone from the daytoday subgyre run; only the *last*
+  entry is ever indexed (`ioptim=-1`), so `(0, 20)` -- the `__main__` default
+  -- is inert for the figure.
+
+### The finding: `RUN_DIR`/`sigma` no longer point where the published figure came from
+
+`fig10_patm_mechanism` imports `RUN_DIR_ROOT_STD` and `load_sigma_patm_std`
+from `fig9_patm_unc`, and **both were repointed after Fig. 10 was last
+rendered** (2026-07-13):
+
+- `EXT='_daytoday'` (fig9_patm_unc.py:116) moved `RUN_DIR` from
+  `runc68v_froman_partialcables_jrastd/201201/subgyre/` to
+  `..._jrastd_daytoday/201201/subgyre/`.
+- `SIGMA_STD_FNAME` is assigned twice (fig9_patm_unc.py:98-99); the second
+  assignment wins, moving sigma from `wApressure_ASTE270_EXFpress_std_new.bin`
+  to `wApressure_jra2012_daytoday_std.bin`.
+
+That second file is the one with the **hPa-vs-Pa unit bug** documented in the
+2026-08-06 entry below, and the daytoday runs are the ones that ran with it, so
+with today's defaults panels (c)/(d) come out badly wrong: iter-20 knots reach
+-2456/+3121 Pa (25-31 hPa, saturating (c)'s +-4 hPa scale basin-wide) and
+`std(dp_atm)/sigma` has median 3.0 and max 86, i.e. (d) is solid black
+everywhere against its 0-1 scale. Renders of both configurations are in
+`output/`:
+
+- **`fig10_patm_mechanism_abcd.{png,pdf}`** -- matches the published
+  `fig:misfit_and_apressure` panels (a)-(d). Explicit flags, not the module
+  defaults: `--run-dir .../runc68v_froman_partialcables_jrastd/201201/subgyre/
+  --sigma-file .../wApressure_ASTE270_EXFpress_std_new.bin --patm-iternums 1 20`.
+  That run is intact on /scratch (iter0000-0020, its own `data.ecco` and
+  errfile, so no fallback is used). Verified against `output/fig10_patm_mechanism.png`'s
+  rows 1-2 by eye: same misfit dipole, same +-2 hPa adjustment lobes, same
+  localized grey ratio blob.
+- **`fig10_patm_mechanism_abcd_daytoday.{png,pdf}`** -- the *current module
+  defaults*, kept only as the evidence for the paragraph above. Do not use it
+  for the manuscript.
+
+Unresolved, for Matt: whether the drift is intentional (Fig. 10 meant to follow
+Appendix B onto the day-to-day prior, in which case it needs the *reruns* with
+`wApressure_jra2012_daytoday_std_Pa.bin`, which don't exist yet) or whether
+Fig. 10 should pin the sub-daily-std run explicitly instead of importing
+fig9's constants. Nothing was changed in `fig9_patm_unc.py`, and Fig. 10's
+imports were left as-is.
+
+The pre-existing `BPReader.get_cost()` `'dim_0' not found` print (bp.py:297,
+noted 2026-07-13) still appears and still affects nothing -- `self.cost` is
+unused on this path.
+
+# Fig. 5 (SPNA_cable misfit / RMSE / skill triptych, `fig:fullnatl_noapress_rms_skill`)
+
+## 2026-08-14 (later): black blobs in the PNG, unopenable PDF -- both fixed
+
+Matt reported the first render as "a little off": black blobs behind the grey
+land in the PNG, and a PDF that Acrobat wouldn't open ("as though it wasn't
+completed"). Two independent bugs, neither in the panel content -- the map
+pixels are unchanged (still the same 98% match to the notebook's PNG; the
+differing pixels are still only the gridlines and panel letters).
+
+- **Black blobs = `savefig(..., transparent=True)`.** The Natural Earth land
+  polygons (`plot.region_cartopy`'s `silver` feature) and the regridded ASTE
+  field don't tile the map exactly, so a transparent save leaves alpha=0
+  pinholes and blobs along every coastline -- ~5% of the pixels inside each
+  axes. Composited on white they vanish, which is why they never showed up in
+  the notebook (inline output is composited on white) or in the pixel diff
+  against `misfit_rmse_skill_opt_20ONLY.png` (identical alpha, so the
+  as-rendered comparison was blind to it). Composited on *black* -- Acrobat's
+  dark mode, most image viewers' dark themes, pdflatex -- they are the blobs.
+  **Now saved `facecolor='white', edgecolor='none'`, no `transparent`.** The
+  output PNG is now fully opaque (alpha == 255 everywhere) and its white
+  composite is byte-identical to the previous render. Note the notebook and
+  `fig3_bp_std.py` both still pass `transparent=True` and have the same latent
+  issue.
+- **Unopenable PDF = a matplotlib 3.4.3 bug in *rasterized* image output**, hit
+  here only because this module rasterizes the `contourf` fills.
+  `backend_pdf.PdfFile._writeImg` re-encodes any rasterized image with <= 256
+  colors as an `/Indexed /DeviceRGB` palette image; Pillow packs a 16-color
+  panel at **4 bits/pixel** and matplotlib records `/BitsPerComponent 4` in the
+  image dict -- but writes `/DecodeParms << /Colors 1 /Columns W /Predictor 10
+  >>` with **no `/BitsPerComponent`**, which the PDF spec defaults to **8**. A
+  conforming reader therefore unfilters the PNG predictor at twice the real row
+  stride and the image stream fails to decode. Matplotlib's Agg path never
+  re-reads the file, so the PNG was fine and only the PDF was broken. Panels
+  (a) and (c) tripped it (16 and 15 colors -> 4 bpc); panel (b) has 20 colors
+  -> 8 bpc and was fine, which is the "half-drawn" look. Fixed upstream in
+  matplotlib 3.5; this env is pinned at 3.4.3.
+  **Fix: `figs_utils.patch_pdf_indexed_image_bitdepth()`**, a small idempotent
+  `PdfFile.beginStream` wrapper that copies the image dict's
+  `BitsPerComponent` into the `DecodeParms` when the two would disagree. It is
+  a no-op on a matplotlib that already emits the key, so it is safe to call
+  unconditionally; `fig5_misfit_rmse_skill.__main__` now calls it right after
+  `use_embedded_pdf_fonts()`.
+  **Verified structurally**, not by eye (no `gs`/`qpdf`/`pdfinfo` on this
+  machine): all 40 xref offsets resolve to their objects, and all six image
+  streams now Flate-decompress *and* PNG-unfilter to exactly
+  `Height * ceil(Colors*BitsPerComponent*Width/8)` bytes. Before the patch the
+  two 4-bpc streams ran short mid-row -- which is the decode failure Acrobat
+  was reporting. PDF still 479 KB.
+- **`si_skill_over_optim.pdf` has the identical PDF bug** (3 of its 16 image
+  streams are sub-8-bpc) and needs the same one-line call added to its
+  `__main__` and a re-render. Not done here. Scan for it with:
+  `grep -a -c '/BitsPerComponent [1247]' output/*.pdf`.
+
+## 2026-08-14: new module `fig5_misfit_rmse_skill.py`, gridlines matched to Fig. 3
+
+Matt asked for a per-figure module behind `misfit_rmse_skill_opt_20ONLY.png`
+(`results.tex:9`), a port of `smart_cables/osse/fullnatl_skill.ipynb` cells
+1-11 onto this package's conventions, with **everything matching the notebook
+except the lat/lon gridline weight, which should match `fig3_bp_std.png`'s**.
+Writes `output/fig5_misfit_rmse_skill.{png,pdf}` and the cache
+`data/fig5_misfit_rmse_skill.nc`.
+
+- **Run: `runc68v_froman_partialcables_jraspread/201201/fullnatl`, iterations 0
+  and 20** -- the notebook's first (uncommented) `run_dir_root`. Unlike most
+  of the runs the other modules depend on, this one is *intact* on `/scratch`:
+  `iter0000` and `iter0020` both still carry `bpdatanom_*`, `bpdifanom_*` and
+  `m_bpday`, so `BPReader` constructs normally and none of the
+  data.ecco-fallback workarounds that `fig3_bp_std` / `smart_grace_mo_skill` /
+  `gen_appendixB_skill_cache` need apply here. `cable_sensor_lonlat` just uses
+  `osse.fm.bpr.sensor_args` (157 sensors, from `bpdifanom_raw`), with a
+  defensive `get_sensors()` call in case that stops holding.
+- **Gridline weight: 1.0 pt / `'gray'`, and it is `import`ed from
+  `fig3_bp_std` (`GL_LINEWIDTH`, `GL_COLOR`), not re-declared**, so the two
+  figures can't drift. **Which value that is was settled against the saved
+  PNG, not the source**, because the two disagree on their face:
+  `fig3_bp_std.py`'s mtime (2026-07-31) is *later* than
+  `output/fig3_bp_std.png`'s (2026-07-14), and the 2026-07-14 STATUS entry
+  below records `GL_LINEWIDTH=1.8, GL_COLOR='k'` while the file today says
+  `1` / `'gray'`. Measured directly in `output/fig3_bp_std.png`: parallels are
+  3-4 px wide at dpi=300 (1.0 pt = 4.2 px; 1.8 pt would be 7.5 px) with core
+  pixels at RGB 128, i.e. `gray` -- so the standing render *is* 1.0/`'gray'`
+  and the 07-31 edit is what's reflected in it. The 1.8/`'k'` note below is
+  stale; don't "restore" it.
+  The notebook itself called a bare `spna(1, 3)`, i.e. matplotlib's
+  `grid.linewidth`/`grid.color` rcParam defaults (0.8 pt, `'#b0b0b0'`).
+- **Verified as a real render against the notebook's own PNG, not by
+  inspection.** Same canvas (5507x1507 px) and **98.07% of pixels identical**;
+  of the 128k that differ, 91% are the gridline pixels themselves and the rest
+  are gridline/fill antialiasing blends over panel (b)'s dark `Purples` (new
+  `[87,69,104]` vs old `[52,0,103]`, etc.). Nothing in the data, colormaps,
+  ranges, level counts, colorbar ticks/labels, cable markers or panel-label
+  placement moved.
+- **Panels (a)/(c) multiply by `hFacC[0]` while (b) uses `.where(hFacC[0])`** --
+  the notebook's asymmetry, deliberately preserved. It is not a slip: land
+  going to *0* rather than NaN is what puts it at the centre of the two
+  diverging colormaps; `.where` on (b) keeps land blank under `Purples`.
+- **One `llc_map` for the whole figure, not one per panel.** `ds.plotpc()`
+  constructs a fresh `llc_map` (a KD-tree over the full ASTE swath) on every
+  call, so the notebook built three. `draw_panel` calls a prebuilt one
+  directly -- which is all `plotpc` does internally -- for the identical
+  regrid and `contourf`. Same pattern as `smart_grace_mo_skill` /
+  `advfw_skill_maps`.
+- **`contourf` fills rasterized per-collection** (matplotlib 3.4's `ContourSet`
+  is not an Artist, so `rasterized=` handed to `contourf` is dropped):
+  **PDF 4.3 MB -> 479 KB**, no change to the PNG at all. `--no-rasterize` /
+  `rasterize=False` for fully vector fills.
+- The notebook's hand-written "hide the 'N' labels on `gls[1:]`" loop is
+  replaced by `plot.retain_only_perimiter_gl_labels` (post-`fig.canvas.draw()`,
+  as in `smart_grace_mo_skill`); checked in the render -- latitude labels on
+  (a) only, panels (b)/(c) clean.
+- Panel letters go through `figs_utils.add_panel_label`, i.e. `$\mathrm{(a)}$`
+  rather than the notebook's plain `'(a)'`. Under `use_latex_times()` +
+  `mathptmx` both are upright Times; the pixel diff above covers this.
+- Cache holds the three 2-D panel fields **plus the 157 sensor lon/lats**, so
+  re-laying-out the figure needs only `data/fig5_misfit_rmse_skill.nc` and the
+  `/work` grid -- nothing from `/scratch`, which is the part that will be
+  purged first. Numbers: misfit |max| 0.0257 (p98 0.0072, nothing beyond the
+  +/-0.02 colorbar), RMSE max 50.1 cm / mean 3.35 cm (22.9% of wet cells run
+  past the 5 cm top, as in the published panel -- the coastal/semi-enclosed
+  maxima `results.tex` describes), skill mean +0.048.
+- `BPReader.get_cost()` prints `Error during computation: 'dim_0' not found in
+  array dimensions` during the cache build. **Pre-existing and harmless** --
+  `get_cost` sums over `('time', 'dim_0')`, but `get_sensors` now labels its
+  index DataArrays `dims='sensor'`, so the selection comes back as
+  `(ioptim, time, sensor)` and the old auto-generated `dim_0` name is gone. It
+  is caught inside `BPReader`, only `self.cost` is lost, and the figure never
+  reads it. The notebook prints the same line. Not fixed here (it would touch
+  every `BPReader` caller); worth a separate pass.
+- Font embedding checked with the project's standard
+  `grep -a -o '/Subtype */Type[0-9C]*\|/FontFile[0-9]*'` recipe: real embedded
+  Type 1 (`/FontFile` present).
+
+### Next steps / open items
+
+- Not swapped into the manuscript -- `smartosse-manuscript/figures/
+  misfit_rmse_skill_opt_20ONLY.png` is still what `results.tex:9` includes.
+  Flag for Matt's visual review of the darker gridlines first, same as Fig. 3.
+- Fig. 3 itself has **not** been re-rendered from its current 1/`'gray'`
+  source in this session, and its own standing item below (swap
+  `bp_day_var_cm_withcable.png` for `output/fig3_bp_std.png` in the
+  manuscript) is still open.
+- `fig5_misfit_rmse_skill.py` is untracked in git, like the other per-figure
+  modules here.
+
+---
+
+# SMART vs GRACE annual monthly skill (`smart_grace_mo_skill`)
+
+## 2026-08-14: notebook ported into the package; panel (b) intentionally blank
+
+`smart_day_skill_grace_mo_skill.png` (the SPNA_cable_annual / GRACE_annual pair)
+now has a module: `smart_grace_mo_skill.py`, a port of
+`smart_cables/osse/grace_llc4320_year_clean.ipynb` cells 42-47 onto this
+package's conventions (`llc_map` regrid done once per panel instead of a
+`ds.plotpc` regrid, `figs_utils` panel labels + cable scatter,
+`retain_only_perimiter_gl_labels` instead of the notebook's hand-written
+"hide the 'N' labels on axes[1]" loop, netCDF cache, rasterized contour fills).
+Writes `output/smart_day_skill_grace_mo_skill.{png,pdf}` and
+`data/smart_grace_mo_skill.nc`. Color scale, colormap, layout, f/H contour and
+sensor scatter are the notebook's, unchanged.
+
+- **Run: `runc68v_froman_natl_1month_alldailyxx_gracellc4320_sc_spread/2012/
+  fullnatl`, iterations 0 and 2** (Matt's, 2026-08-14). This is the
+  reanalysis-spread cable run, i.e. NOT the run behind the currently published
+  PNG -- that one (`..._gracellc4320_sc/2012/`) has had its `m_bpday` `.data`
+  purged, only `.meta` survives, so the published panel (a) cannot be
+  regenerated as-is. The figure will therefore differ in detail from what is
+  in the manuscript today; the biggest visible change is more negative skill
+  along the Gulf Stream / Grand Banks.
+- **Panel (b) is blank on purpose.** The GRACE-equivalent counterpart of the
+  spread cable run does not exist yet. The panel's code path is written and
+  *tested* (`compute_grace_skill` / `load_bpmon_anom`, exercised against the
+  old non-spread `..._gracellc4320/2012/` run: mean skill +0.0065, and it
+  reproduces the published panel (b)'s broad pale-green domain-wide skill,
+  pink Gulf Stream and Iceland-Scotland striping). When the run lands, point
+  `--grace-run-dir` at it, or update `GRACE_RUN_DIR`, and rerun with
+  `--rebuild`; nothing else changes. `--grace-run-dir <old run>` also previews
+  what (b) will look like.
+- **The NR runs out on 2012-11-15, so November is dropped by default.**
+  `phibot_daily` covers 2011-09-13 - 2012-11-15; the FM writes 367 daily
+  records through 2013-01-01. The notebook's plain `resample('1M')` on both
+  sides therefore built a 15-day NR November mean and a 30-day FM November mean
+  and compared them. `complete_months_only=True` (default) keeps Jan-Oct 2012,
+  10 monthly samples. **This is not cosmetic**: the two maps correlate at only
+  0.84, mean skill +0.0026 vs +0.0019, fraction of cells with positive skill
+  0.313 vs 0.256. `--all-months` reproduces the notebook's numbers exactly.
+- **Skill is scored on MONTHLY means even though the cable assimilates DAILY
+  OBP** -- that is the entire point of the pair (panel (b)'s observing system is
+  monthly), and it is why the filename says "smart_day_skill" while the metric
+  is monthly. Daily-scored skill is a different, larger number; don't quote this
+  panel for it.
+- **`BPReader` is bypassed** on both sides (`gen_appendixB_skill_cache.
+  load_bp_anom` for `m_bpday`, `load_bpmon_anom` here for `m_bpmon`): the spread
+  run's directory holds only `m_bpday` + `costfunction`, no `data.ecco`. Same
+  workaround as `gen_appendixB_skill_cache` and `fig3_bp_std`. The 157 cable
+  sensors come from `SENSOR_RUN_DIR` = the matching non-spread cable run, whose
+  `gencost_datafile(1)` is a symlink into `/work` (purge-proof) and is the same
+  static mask for both runs.
+- The f/H contour is drawn from **raw** `f/H`, i.e. with `Depth = 0` on land
+  giving `inf`, which is why the 1e-7 line also traces coastlines. That is how
+  the published panel looks; masking land first removes those segments. Left
+  alone deliberately.
+
+# SI: skill over optimization iterations (`si_skill_over_optim`)
+
+## 2026-08-13: new module backing the "standing pattern of amplification" claim
+
+`sections/grace_equivalent_osse.tex` defends stopping the two annual OSSEs at 3
+iterations by asserting that skill evolves as "a standing pattern of
+amplification to first order (see Supplementary Information)". There was no
+Supplementary Information. `si_skill_over_optim.py` is it: a port of Matt's
+`bpskill_vmax_one_half_quarter` GIF frames (`smart_cables/osse/
+lookat_skill_over_optim.ipynb`, cells 8-13) onto this package's conventions,
+with row (a) = cost curve + raw skill maps at iterations 1/5/10/20 on one color
+scale, and row (b) = the same maps each rescaled by its own amplitude
+`m_i` (RMS skill over the SPNA window) to the final iteration's amplitude.
+Writes `output/si_skill_over_optim.{png,pdf}`, 21 per-iteration frames + a GIF
+under `output/si_skill_over_optim_frames/` (via `dinocean`'s `GIFmaker`, as the
+notebook did), and the cache `data/si_skill_over_optim.nc`.
+
+- **Run: `runc68v_froman_partialcables_jraspread/201201/fullnatl` (full SPNA
+  cable, Jan 2012, 20 iterations).** Not a free choice -- it is the only OSSE
+  on $SCRATCH that still has per-iteration `m_bpday`. Every other run,
+  including the `jrastd` partial-cable set the notebook used (whose `subgyre/`
+  is where the original GIF came from), has had its intermediate iterations'
+  `.data` purged and only `.meta` remains; `selected_iters.tar.gz` and
+  `smart_osse_data/*.tar.gz` don't contain them either. The only 24-iteration
+  survivor, `..._gracellc4320_sc_may2026`, is degenerate (`m_bpday` identical
+  to float32 across all 24 iterations, gencost exactly 0) -- do not use it.
+  If those iterations are ever restored from Ranch/Pleiades, `--run-dir`
+  points the script at them and the cache rebuilds in ~30 s.
+- **The claim holds, but not via pattern correlation, and the figure says so.**
+  Amplitude `m_i` grows monotonically 0.023 -> 0.228 (x10, no overshoot, no
+  sign reversal). Sign agreement `f_i` with the iteration-20 map (over cells
+  with |s_20| > 0.1) is already 0.88 at iteration 1 and 0.90 at iteration 3 --
+  *where* assimilation helps or hurts is settled immediately, which is what
+  "to first order" can defensibly mean. But the spatial correlation `rho_i`
+  with the final map builds up gradually: 0.27 (1), 0.39 (3), 0.55 (5), 0.88
+  (10), 0.95 (15). That is real, not tail noise -- it survives clipping at
+  +/-0.5, restriction to |s_20| > 0.1, and a Spearman version (all within
+  0.09). Successive iterations correlate at 0.98-0.99 throughout, i.e. the
+  pattern never reorganizes; it keeps *extending*, the far field
+  (Iceland-Scotland, Rockall, open gyre) filling in behind the near-cable
+  maxima. Panel (b) plots `rho_i` and `f_i` together for exactly this reason.
+  **If the SI text wants one number, use f_3 = 0.90, not rho_3 = 0.39.**
+- `read_costfunction()` replaces `utils.grep_cost` here (left untouched for its
+  other callers): the grep version shells out per term per file and `float()`s
+  the result, so it raises the moment a term name matches more than one line
+  and silently returns the wrong line when one term name is a substring of
+  another. The Python parser reads each file once and returns every term, which
+  is how the figure gets the gencost misfit next to `fc` for free (they differ
+  by exactly `mult_gencost` = 1e14 here -- the control penalties are
+  negligible, so plotting `fc` is plotting the OBP misfit).
+- Skill definition is `osse._compute_skill`'s, unchanged; it is recomputed
+  inline only so iteration 0 is loaded once instead of 20 times.
+- `contourf` fills are rasterized per-collection (matplotlib 3.4's `ContourSet`
+  is not an Artist, and `rasterized=` passed to `contourf` is silently
+  dropped): 18 MB -> 0.8 MB PDF.
+
+# Inverted-barometer control-frequency sweep (`inverted_barometer_ctrl_freqs`)
+
+## 2026-08-12: ported out of the notebook into `fig_ib_ctrl_freqs.py`, two renderings
+
+Ported `smart_cables/osse/lookat_ib_assim.ipynb` (cells 15/17/22) into the
+package as `fig_ib_ctrl_freqs.py`, rendering the same numbers two ways at
+Matt's request: the notebook's original line plot restyled onto the fig-9 /
+appendix-B relcon greys, and a 100%-stacked-bar version showing the
+contributions as the partition of unity they actually are. Four files in
+`output/`: `inverted_barometer_ctrl_freqs.{png,pdf}` and
+`inverted_barometer_ctrl_freqs_stacked.{png,pdf}`.
+
+- **Data source is `adxx`, not `xx`.** The metric is
+  `||adxx_c * weight_c**-0.5||_2` normalized across controls, so it reads the
+  adjoint gradients; the `xx_*` control fields never enter it. This matters
+  operationally because `xx_apressure` is 7.1 GB per frequency while the whole
+  8-control `adxx` set is ~430 MB -- a run archive built with a `*xx*` glob
+  comes out at 58 GB instead of ~450 MB. `tar_ib_adxx.sh` (new, this dir)
+  stages exactly what's needed; it also fixes a `--transform` in the original
+  archiving loop that was prepending `$d/iter0000/` to paths already rooted
+  there, producing doubled `24hr/iter0000/24hr/iter0000/` nesting.
+- **240 hr is excluded from `HOURS`.** That run survives only one adjoint
+  record (nt=1) and its relcon is degenerate: uwind, vwind and apressure all
+  come back *exactly* 0.0 with swdown taking 0.76. It is an empty data point,
+  not a 10-day one. Dropping it leaves lags 1.0-4.0 d, which is the range the
+  published figure already showed -- the notebook got there differently, by
+  slicing `[:-2]` off a 24-120 hr sweep.
+- **Record count falls with the adjustment interval** (nt = 8, 6, 5, 4, 4, 3,
+  3 across the seven frequencies) since a fixed window holds fewer knots as
+  they spread apart, so the time-mean averages fewer records at long lag.
+  Inherited deliberately so the figure matches the published one -- this is
+  the caveat the notebook flagged in its own cell-18 markdown.
+  `load_relcon_sweep` returns `nrec` as a coord if it ever needs weighting.
+- **Result** (`other` / `winds` / `patm` by lag in days): 1.0 -> .015/.342/.643;
+  1.5 -> .021/.396/.583; 2.0 -> .026/.414/.560; 2.5 -> .031/.567/.403;
+  3.0 -> .026/.438/.536; 3.5 -> .048/.765/.186; 4.0 -> .050/.755/.195. Note
+  the non-monotonic bump at 3.0 d (patm recovers to .54 from .40 at 2.5 d)
+  -- present in both renderings, not a plotting artifact.
+- **Greys** come from `_shade_color(RELCON_BAR_GREY, REGION_SHADE_FACTORS[g])`,
+  i.e. appendix B's neutral `'0.55'` run through fig 9's shade factors, so
+  'other' is lightest and patm darkest. Imported from those modules rather
+  than re-derived -- don't hand-pick replacements here. The line variant adds
+  per-series dash patterns (`LINE_STYLES`) because three greys alone are thin
+  encoding at print size, and outlines its markers (`markeredgecolor='0.25'`)
+  so the light 'other' fill still reads.
+- Cached to `data/ib_ctrl_freqs.nc`; `load_relcon_sweep(use_cache=False)` to
+  recompute from scratch.
+- **Open question for Matt**: which rendering goes in the manuscript. The
+  stacked version makes the winds/patm crossover a single moving boundary and
+  is the better argument-carrier; the line version shows absolute levels and
+  matches what's already published.
+
 # Fig. 7 (Labrador Sea cable "freshwater flux journey", `fig:greenland_adjustment`)
 
 ## 2026-07-15: layout rebuilt on Matt's tested skeleton, panel content re-matched to the notebook
@@ -190,7 +761,105 @@ naming pattern used by the other per-figure modules.
 
 # Fig. 1 (global cable network + SPNA inset)
 
-## Update 2026-07-14 (latest): multiline legend height-matched to the inset, fontsize bumped on both legends
+## Update 2026-08-01 (latest): recolored (silver land / blue ASTE ocean / white elsewhere), global-panel legend removed
+
+Matt's styling pass on `fig1_global_cables.py`. The previous scheme (white
+land, `#cccccc` ASTE ocean, `#f5f5f5` non-ASTE ocean) was a prior session's
+own judgment call, flagged for review in the 2026-07-14 entry below -- now
+superseded:
+
+- **Land -> `silver`** on both panels (`LAND_COLOR` `'#ffffff'` ->
+  `'silver'`), i.e. `region_cartopy`/`spna`'s own default `landfacecolor`
+  (`smartosse/plot.py`), so Fig. 1's land matches every other map figure in
+  the package rather than being a per-figure override.
+- **ASTE-domain ocean -> `#7fb9da`** (`Blues` at 0.45), after two rounds of
+  Matt's review: `#6baed6` (0.5, picked by sampling Fig. 2's PNG) -> `#4a98c9`
+  (0.6, "slightly darker") -> `#7fb9da` (0.45, "paler"). Dial it with the one
+  constant; the `Blues` ladder is 0.4 `#94c4df` / 0.45 `#7fb9da` / 0.5
+  `#6aaed6` / 0.55 `#5ba3d0` / 0.6 `#4a98c9`. (The Fig. 2 sampling wasn't
+  wasted -- it also showed Fig. 2's land is `(192,192,192)` = `silver`,
+  independently confirming the land choice above -- but Matt clarified he
+  meant "blue" generally, not a Fig. 2 match.) The SPNA inset uses the same
+  blue (`OCEAN_COLOR` aliases `ASTE_OCEAN_COLOR`); it lies entirely inside ASTE.
+- **Thin black outline on the inset's partial-cable markers**, new
+  `PARTIAL_EDGE_COLOR`/`PARTIAL_EDGE_LW = 'k'/0.5`, applied to both the
+  `scatter` (`edgecolors`/`linewidths`) and the legend key
+  (`markeredgecolor`/`markeredgewidth`) so the two can't drift. Matters most
+  for `LS_cable`, whose blue would otherwise sit on the blue ocean.
+- **The inset was already pure cartopy** -- `spna()`'s NaturalEarthFeature
+  land + `cf.OCEAN`, no `ds.plotpc`/model data anywhere in it (checked when
+  Matt raised it). Only the *global* panel's ASTE-domain fill touches model
+  data, and it can't not: the domain shape comes from `hFacC` via
+  `llc_map.regrid` (cartopy has no notion of where ASTE ends). That fill
+  bypasses `ds.plotpc` too -- see `plot_aste_domain` and the 2026-07-14
+  entry below for why.
+- **Real cartopy bug found and fixed: white speckles along the inset's
+  coastlines.** Matt reported them and correctly noted they shouldn't happen
+  from plain cartopy fills. They were genuine holes -- pixels with **alpha
+  exactly 0** (checked in the PNG, so nothing was drawn there; not an
+  antialiasing blend, which would give intermediate alpha, and not something
+  painting white).
+  - **Cause: land and ocean were being drawn at different Natural Earth
+    scales.** `region_cartopy` hardcodes land at `scale='110m'`, while the
+    inset's ocean came from `cf.OCEAN`. The two datasets are exactly
+    complementary only *within* a scale, so a 110m land polygon over a 50m
+    ocean polygon leaves uncovered slivers wherever the coastline is
+    convoluted (Canadian archipelago, fjords) -- which is precisely where the
+    speckles were.
+  - **`cf.OCEAN.scale` reports `'110m'` and is a plain `str`, which is
+    misleading** -- cartopy 0.22 resolves module-level features' scale at
+    draw time from the axes extent. Caught by A/B render, not by reading the
+    attribute: `cf.OCEAN` produced a transparent-pixel count *identical* to an
+    explicit `'50m'` ocean (88030) and different from explicit `'110m'`
+    (85050). Don't trust `.scale` on `cf.LAND`/`cf.OCEAN`; pass an explicit
+    `NaturalEarthFeature`.
+  - **Fix**: explicit, per-panel matched scales -- new `GLOBAL_FEATURE_SCALE
+    = '110m'` / `INSET_FEATURE_SCALE = '50m'`, with both panels' land *and*
+    ocean built as explicit `NaturalEarthFeature`s. The inset now passes
+    `show_land=False` to `spna()` and draws its own land at 110m's place in
+    region_cartopy's zorder stack (ocean 0, land 1, below the gridlines' 2),
+    so nothing else about the `spna()` view changes. **Side effect worth
+    knowing**: the inset's coastlines are now 50m, i.e. visibly finer than
+    before -- deliberate (better at that zoom), and revertible by setting
+    `INSET_FEATURE_SCALE = '110m'`.
+  - Measured, not eyeballed: holes in a coastal window went 1416 -> **0**,
+    and every matched-scale combination (110/110, 50/50) gave 0 while only
+    the mismatched one was nonzero. Re-measured on the real figure after the
+    fix: 0 in both variants. Ocean also keeps `edgecolor='face'` (cf.OCEAN's
+    own default, which the first pass had overridden to `'none'`) -- it
+    stitches the subpixel antialiasing seam that remains once the geometry
+    matches; `'face'` on the *land* is worse, since its dashed `linestyle`
+    makes the stroke intermittent.
+- **Non-ASTE ocean -> white** (`NONASTE_OCEAN_COLOR` `'#f5f5f5'` ->
+  `'#ffffff'`), so the domain reads as the figure's subject. Land/ocean
+  zorder is unchanged (ocean 0 -> ASTE patch ~0.5 -> outline ~0.6 -> land 1
+  -> cable dots 2/3 -> SPNA box 10); checked in the render that the `dimgray`
+  representative dots stay legible against both silver land and the blue
+  patch, which was the risk in dropping white land.
+- **Global panel's Representative/Funded legend removed entirely** --
+  `plot_global_panel`'s `legend`/`legend_kwargs` params and the `Line2D`
+  proxy block are gone, not just defaulted off (its only caller is
+  `make_fig1`). `LEGEND_FONTSIZE` survives, now driving the inset's region
+  legend alone.
+- **Comments/docstrings compressed throughout** at Matt's request -- the long
+  explanatory blocks (module docstring, `plot_aste_domain`'s bypass-`plotpc`
+  rationale, the legend-tuning writeups) are cut to the operative facts. No
+  behavior tied to them changed. Unused `matplotlib.patches` import dropped.
+- Verified by a real end-to-end render (`module load texlive`, `esmpy_3.10`,
+  `python -m smartosse.figures.fig1_global_cables`), not by inspection --
+  output visually checked at full resolution, and PDF font embedding
+  re-checked with the project's standard `grep -a -o '/Subtype
+  */Type[0-9C]*\|/FontFile[0-9]*'` recipe: real embedded Type 1 (`/FontFile`
+  present). Current render: `figures/output/fig1_global_cables.png`/`.pdf`.
+- **Both standing variants re-rendered** at the new colors:
+  `figures/output/fig1_global_cables.png`/`.pdf` (single-line, the default)
+  and `figures/output/fig1_global_cables_multiline_legend.png`/`.pdf`
+  (`make_fig1(legend_multiline=True)`). The multiline legend's box height is
+  still matched to the inset's after the recolor (nothing this pass touched
+  `INSET_MULTILINE_LEGEND_LABELSPACING` or the fontsize), confirmed in the
+  render; its PDF fonts check out the same way.
+
+## Update 2026-07-14: multiline legend height-matched to the inset, fontsize bumped on both legends
 
 Matt liked the multiline-label render from the update below, with 2 more
 asks: make that legend's box height ~match the inset's height (top/bottom
@@ -368,7 +1037,610 @@ route documented for Fig. 9. Current render:
 
 # Fig. 9 (p_atm uncertainty) — where we left off
 
-## Update 2026-07-13 (latest, cont.): (c) legend height, split the difference
+## Update 2026-08-11 (night, LATEST): Appendix B figure FINISHED — SPG's real
+## iter0020 is in, panel (c)'s two legends stacked, all four of Matt's asks done
+
+`xxsubgyre20.tar.gz` landed SPG's genuine `xx_*`/`adxx_*` at iter0020 (files
+15:31). `valid_gradient_regions()` now passes it — its `adxx_apressure` /
+`adxx_uwind` / `adxx_vwind` are no longer identically zero — so
+`STD_EXCLUDE_REGIONS = ()` and **all four cables appear in (b), (c) and (d)**.
+SPG's forward output (`m_bpday`, 13:24) was untouched by that transfer, so the
+15:44 skill cache is current and (d) did not need recomputing.
+
+Matt's four asks from this round, all done and all verified in the render:
+
+1. **(c) all bars one grey** (`RELCON_BAR_GREY = '0.55'`) — cable identity is
+   already on the x tick labels, which frees the light/mid/dark ramp to mean
+   only other / winds / p_atm.
+2. **(c) legends bigger, inside the headroom above y=1** — `RELCON_YLIM_TOP =
+   1.75`, fontsize 16 / title 17. The constants for this were added last session
+   but **never wired in**: the body still anchored the two legends
+   `lower left @ (0.13, bar_top)` and `lower right @ (1.0, bar_top)`, i.e. side
+   by side, and at fontsize 16 they were jointly wider than the axes — "winds"
+   ran through the STD swatch in the 15:46 render. Now both anchor at
+   `RELCON_LEGEND_X = 0.24`, with the shade key `RELCON_LEGEND_DY = 0.185`
+   above the hatch key, both `loc='lower left'`. Stacking spends headroom (free)
+   instead of font size (the thing asked for). This is the first time (c)'s
+   legend placement has been checked against a real render.
+3. **(b) subscript is `i,j`, not a bold x** — `fig9_spread_3panel.RATIO_YLABEL`,
+   so Fig. 9b and Appendix B (b) stay in sync and both use the index letters the
+   paper introduces earlier.
+4. **(d) widened to `SCATTER_LIM = (-0.7, 0.7)`** — the "(d)" letter and the two
+   RMS lines no longer crowd. Still clips almost nothing: outside-view 0.02%
+   (p_b) / 0.40% (V_bt), and the annotated RMS is computed on all points anyway.
+
+Two further asks, same session, also done and re-rendered:
+
+5. **(b) legend moved from upper right to upper LEFT** — `RATIO_LEGEND_X = 0.13`
+   rather than flush at 0.0, because the "(b)" panel letter is fontsize 40 at
+   x=0.02 and a flush-left legend runs through it. The left half of the top
+   strip is the emptier one anyway: the curves' tall excursions (NS 5.0, LS 4.3)
+   are all in the last three days of January.
+6. **(d) RMS folded into the legend entries** — `plot_skill_scatter(...,
+   rms_in_legend=True)`, now the default, labels the swatches
+   "$p_b$: RMS = 0.055" / "$V_{bt}$: RMS = 0.061" and drops the separate
+   top-left annotation, so each field name appears once instead of twice. The
+   old split layout is still reachable with `rms_in_legend=False,
+   annotate=True`.
+
+Final numbers, four cables:
+
+    (b) max |dp_atm|/sigma   LS  med 0.59 max 4.31, >1sigma 16% of days
+                             SPG med 0.43 max 2.99 ... 13%
+                             NS  med 0.93 max 5.01 ... 48%
+                             Nfl med 1.34 max 3.59 ... 74%
+    (c) relcon p_atm  STD    0.961 / 0.964 / 0.967 / 0.965  (LS/SPG/NS/Nfl)
+                      SPREAD 0.624 / 0.549 / 0.492 / 0.644
+    (d) p_b  n=161840  rms(std-spread)=0.0547  median diff +0.0132
+        V_bt n=166332  rms(std-spread)=0.0614  median diff +0.0055
+
+SPG slots in where expected on every panel — relcon p_atm 0.55 -> 0.96 like the
+other three, ratio curve the quietest of the four — so nothing about the earlier
+three-cable reading changes.
+
+Render: `figures/output/figB_patm_std_4panel.{png,pdf}`, 7x `/FontFile` +
+7x `/Subtype /Type1` (real embedded fonts), 676 KB.
+
+### Fig. 9 itself regenerated, for the `i,j` subscript only
+
+`RATIO_YLABEL` is **shared** between `fig9_spread_3panel` and Appendix B's
+panel (b) — deliberately, since the two panels are meant to be flipped between —
+so editing it left Fig. 9's saved render (Jul 22) stale and disagreeing with
+Appendix B. Re-ran `python -m smartosse.figures.fig9_spread_3panel`; no code
+change was needed or made, and nothing else about the figure moved (its (b)
+legend stays upper right, ylim 0-1.7, 3x2 handle order). New
+`figures/fig9_spread_3panel_test.{png,pdf}` — the one `controls.tex:22`
+includes — 7x `/FontFile` + 7x `/Subtype /Type1`, 1.5 MB. The two figures'
+(b) axis labels now match character for character.
+
+**Trap, hit immediately after this render:** there are TWO
+`fig9_spread_3panel_test.png` on disk. `__main__` writes it **next to the
+module** (`figures/`), because that is where `tex/figures ->` points and so
+where `controls.tex:22` resolves it; `figures/output/` also held a copy, left
+there Jul 22 and never regenerated since. Matt opened the `output/` one and
+reasonably read it as "the i,j change didn't take" — it is in fact
+*pre-redesign*: panel (b) still the +/-sigma envelope in hPa rather than the
+normalized whole-domain max, panel (c) still the per-cable colours. Both copies
+are now the 22:22 render. If they diverge again, `figures/` is the canonical
+one; `output/` is a convenience mirror that nothing compiles from. (Every other
+figure here writes to `output/` — fig9 is the exception, and that asymmetry is
+what makes this easy to trip over.)
+
+**Still open, unchanged by this session:** Appendix B's *text*
+(`sections/appendix.tex`) is still the old spread-based version with the
+inverted causality, and the figure is not `\input` anywhere. The text must not
+overreach from (d) to the gateways — see "The tension this figure now has to be
+read against" below.
+
+## Update 2026-08-11 (evening): gradients arrived — ALL FOUR PANELS of
+## Appendix B now carry real data; SPG held out; panel (b) ylim had to change
+
+`xx.tar.gz` (extracted 14:37) delivered `adxx_*` and `xx_apressure.effective`
+for every region. Panels (b) and (c) are built. Current render:
+`figures/output/figB_patm_std_4panel.{png,pdf}` (8x `/FontFile`, 8x
+`/Subtype /Type1`).
+
+### SPG is held out of the std side of (b), (c) and (d)
+
+`subgyre/iter0020`'s `adxx_apressure`, `adxx_uwind` and `adxx_vwind` are
+**identically zero** over all 4 691 648 elements, and its other gradients are ~8
+orders of magnitude below the other cables' (`adxx_atemp` absmax 1.2e-01 vs
+1.7e+08 for labsea). Its *forward* output is NOT degenerate — `m_bpday` and
+`trsp_3d_set1` both differ between iter0000 and iter0020 — so this is an adjoint
+/ archiving problem, not a failed solve. Matt confirmed the iter0020 is not
+final and will re-send it.
+
+Held out via `STD_EXCLUDE_REGIONS = ('subgyre',)`; empty that tuple and run
+`gen_appendixB_skill_cache --regions subgyre --runs std` when the run lands.
+The std/subgyre entry in `data/appendixB_skill_maps.nc` was explicitly set to
+NaN (with a `subgyre_std_note` attribute recording why), because the cache
+merges with `combine_first` — recomputing the other three would otherwise have
+left the stale subgyre values in place.
+
+**Why a zero gradient could not be left to fall through.** `ControlDataset`
+forms `std_cost = sum((adxx*unc)^2)^0.5` and then normalizes by its sum over
+controls. Zero p_atm and wind gradients therefore do not blank those bars —
+they renormalize the *remaining* controls to 1.0, and SPG plotted as a
+confident, entirely wrong `other = 1.00` bar. That is worse than a gap, hence
+`valid_gradient_regions()` tests the array contents, not file presence.
+
+### Correction carried out: (c) needs `adxx_*`, and a NEW data.ctrl dir
+
+Confirmed against `smartuq/ctrl.py`: `ControlDataset` reads
+`ad{ctrl}{ext}.{iter}.data` with `ext=''` — the plain `adxx_*` gradients, not
+`xx_*`, not `.effective`. The control list and weight filenames come from
+`data_ctrl_dir`/`weight_dir`, so the run's own `data.ctrl` is never opened.
+
+The standing `data_ctrl_dir_std/data.ctrl` is a **symlink into the live run
+template** (`input_weight/data.ctrl_jrastd`) and still names the sub-daily
+`wApressure_ASTE270_EXFpress_std_new.bin`. It was NOT edited — repointing a file
+that runs are launched from, in order to serve a figure, is the wrong trade.
+Instead `input_weight/data_ctrl_dir_std_daytoday/` holds a real copy differing
+in exactly one line (`xx_gentim2d_weight(8)` ->
+`wApressure_jra2012_daytoday_std_Pa.bin`), verified by `grep_ctrl` to give 8
+controls <-> 8 correctly paired weights. `figB` uses it via
+`DATA_CTRL_DIR_STD_DAYTODAY`.
+
+### Panel (b): the shared-ylim design had to be abandoned, and that IS the result
+
+The plan was ylim identical to Fig. 9b (0-1.7) so the eye compares without a
+key. Not tenable — whole-domain max |dp_atm|/sigma under the day-to-day prior:
+
+    LS   min 0.05  med 0.59  max 4.31   above 1 sigma on 16% of days
+    NS   min 0.21  med 0.93  max 5.01   ... 48%
+    Nfl  min 0.18  med 1.34  max 3.59   ... 74%
+
+against the spread prior, where **no cable exceeds 1.00 on any day** (maxima
+1.00 / 0.54 / 0.59 / 0.49). Clipping at 1.7 ran three curves off the top for a
+quarter of January. Now `RATIO_YLIM_STD = (0, 5.3)`, yticks 0-5, 1-sigma line
+and shading kept — so the cross-figure comparison survives in the stronger form
+"Fig. 9b lives entirely inside the grey band; this panel does not".
+
+### Panel (c): the redistribution is dramatic, and arithmetically expected
+
+    STD     LS  patm 0.961  winds 0.007  other 0.032
+            NS  patm 0.967  winds 0.002  other 0.031
+            Nfl patm 0.965  winds 0.004  other 0.031
+    SPREAD  LS  patm 0.624  winds 0.288  other 0.088
+            NS  patm 0.492  winds 0.442  other 0.066
+            Nfl patm 0.644  winds 0.311  other 0.045
+
+0.96 looked implausible on sight, so it was checked rather than shipped:
+`std_cost` scales with `unc = sigma`, and sigma_patm^std is ~15x sigma_patm^spread
+at the sensors, so LS's spread ratio patm/winds = 0.624/0.288 = 2.17 should
+become ~32 and a share of ~0.97. It does. The panel's claim ("re-weighting
+p_atm redistributes attribution between wind and pressure") is carried
+emphatically.
+
+Legend fix: at fontsize 14 / handlelength 1.4 the two above-axes legends were
+jointly wider than the axes and visibly overlapped ("winds" ran into the STD
+swatch). Now 11.5 / 1.1 with tighter columnspacing. The SPG-omitted note sits in
+the `RELCON_YLIM_TOP` headroom band (bar tops are at 0.85 in axes fraction), not
+in the axes interior where a first attempt overlapped the NS bars.
+
+### Panel (d): back to three cables
+
+With SPG held out: p_b rms(std-spread) = 0.0605, V_bt = 0.0677, median diff
++0.0148 / +0.0074 — the three-cable numbers, recovered exactly after a full
+recompute of the std side against the current run directory. The reading is
+unchanged: the two OSSEs' skill fields agree to ~0.06 RMS against a
+point-to-point spread of ~[-0.5, +0.4], with the std OSSE very slightly better.
+
+### The tension this figure now has to be read against
+
+Panels (b) and (c) say the day-to-day prior changes the *assimilation* a great
+deal (p_atm relcon 0.5-0.6 -> 0.96, adjustments from <1 sigma to 3-5 sigma),
+while (d) says the *p_b and V_bt skill fields* barely move. Both are true, and
+the gateway table (see the 2026-08-11 session at the head of
+`DavisStrait_fw_decompisition_plan.md`) sits in between: Davis Strait's mean
+bias reduction falls 40.1% -> 28.1%. "The QoIs change negligibly" is defensible
+for the gridded skill fields and **not** defensible for the gateway means —
+Appendix B's text must not overreach from (d) to the gateways.
+
+## Update 2026-08-11 (later): subgyre landed — panel (d) is now all four
+## cables; (b) and (c) are STILL blocked, and the blocker is `adxx_*`, not `xx_*`
+
+Matt's expectation was that the newest transfer completed everything panels (b)
+and (c) need. It did not. What it *did* complete is real and worth having, and
+panel (d) — the panel that carries the appendix's actual claim — is now final.
+
+### What arrived since the entry below
+
+- **`subgyre/` now exists** under `RUN_DIR_ROOT_STD`, extracted 2026-08-11 13:53
+  from `subgyre.tar.gz`. It is **genuinely distinct** from `northsea/` this time
+  (`m_bpday` iter0020 md5 `d6646aef…` vs `6780c91f…`), so the duplicated-run
+  defect flagged on 2026-08-06 (§2) is fixed. All four cables + fullnatl are
+  present at iter0000 and iter0020.
+- **`labsea/*/diags/state_3d_set1/` now exists** (from `labsea_state3d.tar.gz`,
+  extracted 14:02), 32 daily files at each of iter0000/iter0020, `fldList =
+  {THETA, SALT}`. **This unblocks ADV_fw for the std_daytoday run** — i.e. the
+  2026-08-06 §3 blocker on `gates_corrected.py jrastd_daytoday` is gone. Still
+  needs `gen_gate_caches.py` to write the FM cache first.
+
+### What did NOT arrive — and the correction to what we were asking for
+
+No `xx_*`, no `adxx_*`, no `data.ctrl`, no `data.ecco`, anywhere under
+`runc68v_froman_partialcables_jrastd_daytoday/`. Verified two ways: `find` over
+the extracted tree, and `tar tzf | grep` over **all three** tarballs
+(`selected_iters.tar.gz`, `subgyre.tar.gz`, `labsea_state3d.tar.gz`) — zero hits
+in any of them. So (b) and (c) are unchanged from the entry below.
+
+**Correction to the earlier ask.** The 2026-08-11 entry below (and the
+placeholder text, and `has_control_set()`) said panel (c) needs "the `xx_*`
+control set plus a `data.ctrl`". Both halves are wrong, and it matters because
+it was the list being sent to the other machine:
+
+- `smartuq.ctrl.ControlDataset._load_dataset` reads
+  `f'{run_dir}/ad{ctrl}{ext}.{iter:010d}.data'` with `ext=''` — i.e. the plain
+  **`adxx_*` adjoint gradients**, not `xx_*`, and not the `.effective` variants.
+- It reads `data.ctrl` and the weight filenames from `data_ctrl_dir` /
+  `weight_dir`, which `load_relcon_grouped` passes explicitly
+  (`DATA_CTRL_DIR_STD`, `WEIGHT_DIR` — both local to this machine). The run's
+  **own `data.ctrl` is never opened**, so its absence does not block (c).
+
+`has_control_set()` was probing `data.ctrl` + `xx_uwind.effective`; it now probes
+`adxx_{uwind,vwind,apressure}.{iter:010d}.data`. As written before, it would have
+kept reporting (c) unbuildable even after the right files arrived.
+
+**Exact transfer list to unblock (b) and (c)**, per region
+(labsea/subgyre/northsea/newfoundland), from `iter0020/`:
+
+    xx_apressure.effective.0000000020.data      # (b)   ~46 MB x 4 =  184 MB
+    adxx_{apressure,aqh,atemp,lwdown,precip,swdown,uwind,vwind}.0000000020.data
+                                               # (c)  ~368 MB x 4 = 1.5 GB
+
+(Sizes from the superseded `BADrunc68v_.../labsea/iter0020/`, which still has the
+full set locally and is the right template for what the file names look like.)
+
+### Panel (d) rebuilt on four cables
+
+`gen_appendixB_skill_cache --regions subgyre --runs std` (~4 min) filled the one
+NaN slot; the cache is now finite for all 2 runs x 4 regions x 2 fields
+(300549 p_b / 304733 V_bt points per experiment). Re-rendered figure:
+
+    p_b    n=161840  rms(std-spread)=0.0547  median spread=+0.0177  median std=+0.0321  median diff=+0.0132  outside view=0.06%
+    V_bt   n=166332  rms(std-spread)=0.0614  median spread=+0.0000  median std=+0.0054  median diff=+0.0055  outside view=0.57%
+
+Against the three-cable version (p_b 0.0605, V_bt 0.0677) the RMS deviation from
+the 1:1 line **fell slightly** with SPG added, and the small positive median
+offset survives — so the reading is unchanged and, if anything, firmer: the two
+OSSEs' skill fields agree to ~0.055-0.061 RMS against a point-to-point spread of
+roughly [-0.5, +0.4], with the std OSSE very slightly the better of the two.
+Sanity check on the pooling: the point counts scale *exactly* with the cable
+count (p_b 161840/4 = 40460 = 121380/3; V_bt 166332/4 = 41583 = 124749/3), which
+is what you want — every cable contributes the same SPNA mask, so SPG was added
+cleanly and nothing was dropped or double-counted.
+
+`SCATTER_LIM = (-0.6, 0.6)` still leaves <1% outside the view (0.06% / 0.57%), so
+it was not retuned. PDF re-checked with the project's grep recipe: 7 x
+`/FontFile` + 7 x `/Subtype /Type1`, real embedded fonts, 679 KB.
+
+### Still open (unchanged)
+
+- (b)/(c) await the transfer list above. Everything else about them is done —
+  the rebuild after the files land is one command, no edits.
+- `data_ctrl_dir_std/data.ctrl:66` still reads
+  `wApressure_ASTE270_EXFpress_std_new.bin`. Repoint at
+  `wApressure_jra2012_daytoday_std_Pa.bin` before trusting (c)'s STD bars.
+- (c)'s two-legends-above-the-axes placement has still never rendered with real
+  bars — first guess, check it on the rebuild.
+- Appendix B's *text* (`sections/appendix.tex`) untouched, still the old
+  spread-based version with the inverted causality.
+
+## Update 2026-08-11 (earlier): Appendix B figure built — (a) and (d) render from
+## real data, (b) and (c) are blocked on control files the rerun didn't ship
+
+The 4-panel Appendix B figure specified in the 2026-08-06 entry below now exists
+as code and renders end-to-end. Two of its four panels carry real data; the
+other two are annotated placeholders because of what the reruns contain, not
+because of anything unfinished in the code. Matt asked for the preliminary
+render anyway ("build what you can, we will rebuild again when subgyre is
+back"), and confirmed the reruns used the **Pa-corrected** weight file.
+
+### What landed on disk (and what didn't)
+
+`runc68v_froman_partialcables_jrastd_daytoday/201201/` was repopulated
+2026-08-11 12:06-12:43 from `selected_iters.tar.gz` (11.8 GB -> 48 GB, 4 dirs x
+280 files, extraction complete); the run output inside is dated 2026-08-08, so
+these are the corrected-weight reruns. They contain, per iteration directory,
+**only** `adm_bpday` / `bpdatanom_*` / `bpdifanom_*` / `m_bpday` and
+`diags/{state_2d_set1, trsp_3d_set1}`. Checked by `find` over the whole tree:
+
+- **No `xx_*.effective`, no `adxx_*`, no `data.ctrl`, no `data.ecco`** anywhere
+  under that root. The spread runs have all of them. This is what blocks panels
+  (b) (needs `xx_apressure.effective.*.data`) and (c) (needs the whole `xx_*`
+  set plus a `data.ctrl`, through `smartuq.ctrl.ControlDataset`).
+- **`subgyre/` is still absent** — the set is fullnatl / labsea / newfoundland /
+  northsea. So (b)/(c)/(d) cover three cables (LS/NS/Nfl), not four. Panel (a)
+  still shows all four cables' sensor dots: those come from the synthetic-obs
+  binaries in `input_ecco/smart_phibot/`, not from a run.
+- **Still no `state_3d_set1`**, so no salinity and no ADV_fw, including for
+  labsea. Doesn't affect the figure (ADV_fw was already text-only per the
+  2026-08-06 plan), but the labsea salinity output that was requested isn't in
+  this transfer either.
+- `data_ctrl_dir_std/data.ctrl:66` **still reads
+  `wApressure_ASTE270_EXFpress_std_new.bin`** — the sub-daily std file, not the
+  day-to-day one. Unchanged since it was flagged on 2026-08-06, and it is now
+  load-bearing: it sets the sigma panel (c)'s STD bars are weighted against.
+  Repoint it at `wApressure_jra2012_daytoday_std_Pa.bin` before trusting (c).
+
+### New files
+
+- **`figB_patm_std_4panel.py`** — the figure. All four panels are fully
+  implemented; `make_figB(..., skip_unavailable=True)` (the default) draws (b)
+  and (c) as dashed, annotated placeholder boxes when their inputs are missing,
+  so the preliminary render still shows the final layout and says on the figure
+  why the boxes are empty. `skip_unavailable=False` raises instead. Availability
+  is probed by `has_patm_adjustment()` / `has_control_set()`, and `regions` is
+  intersected with what the std run set actually contains, so SPG drops out of
+  (b)/(c)/(d) automatically and reappears the moment its directory exists — the
+  rebuild is one command, no edits.
+- **`gen_appendixB_skill_cache.py`** — precomputes panel (d)'s skill maps into
+  `data/appendixB_skill_maps.nc` (dims `(run, region, tile, j, i)`, variables
+  `skill_bp` / `skill_Vbt`). ~12 min for the full 2 runs x 4 cables x 2 fields
+  sweep, dominated by `trsp_3d_set1` reads (~80 s per V_bt, ~25 s per p_b).
+  Writes are **merged** with whatever is already cached (`combine_first`), so
+  `--regions subgyre` later fills SPG in without recomputing the rest.
+- `data/appendixB_skill_maps.nc` — the cache itself (~57 MB), currently NaN for
+  every `std`/`subgyre` entry.
+
+### Two deliberate departures, both forced by the data
+
+- **p_b is loaded without `BPReader`.** `ForecastModel._load_fm_bp` constructs
+  one, and `BPReader.__post_init__` unconditionally calls `read_weight()`, which
+  needs a `data.ecco` the std reruns don't have — it raises `FileNotFoundError`
+  before any field is read. The weight feeds only the cost diagnostics, which
+  skill never touches, so `gen_appendixB_skill_cache.load_bp_anom()` reproduces
+  the two lines of `_load_fm_bp` that matter (`m_bpday` -> `100/9.81 * (x -
+  x.mean('time'))`) and skips the reader. Same shape of workaround, for the same
+  reason, as `fig3_bp_std.load_cable_sensor_lonlat()`; `bp.py` deliberately left
+  alone rather than made tolerant, since other callers rely on the cost path.
+- **`V_bt` is the meridional component, and skill is at iteration 20.**
+  Meridional because that is what manuscript Fig. 5 plots ("zonal ... not shown
+  but are quantitatively comparable") — `OSSE.toggle_uv('V')`, i.e. `fldUV[1]`
+  out of `UEVNfromUXVY`. Iteration 20 because it is the only non-zero iteration
+  the std reruns contain, and it matches Fig. 9's own `iternum=20`; **Fig. 5 is
+  iteration 10**, so panel (d)'s numbers are not directly comparable to it.
+  Both axes of (d) use iteration 20, so the panel is internally consistent.
+
+### Panel (d), the actual preliminary result
+
+x = skill in the spread OSSE, y = skill in the std OSSE, one point per SPNA grid
+cell (`plot.spna()`'s own window, lon [-80, 10], lat [40, 80]) per cable, three
+cables pooled, 1:1 line, RMS deviation from it annotated:
+
+    p_b    n=121380  rms(std-spread)=0.0605  median spread=+0.0207  median std=+0.0373
+    V_bt   n=124749  rms(std-spread)=0.0677  median spread=+0.0000  median std=+0.0055
+
+i.e. the two OSSEs' skill fields sit on the diagonal to within ~0.06 RMS, with
+correlations of 0.895 (p_b) and 0.911 (V_bt), against a point-to-point skill
+spread of roughly [-0.5, +0.4]. **The std OSSE is very slightly the better one**
+(median difference +0.015 p_b, +0.007 V_bt) — worth stating in that direction
+rather than as "no difference", since it is a small consistent offset, not
+noise. This is the quantitative backing for the "QoIs change negligibly"
+sentence, and it does not depend on either blocked panel.
+
+`SCATTER_LIM = (-0.6, 0.6)` was picked from the distribution, not guessed: the
+1st-99th percentiles are about [-0.5, +0.4] for both fields, and that window
+leaves 0.07% (p_b) / 0.76% (V_bt) of points outside the view. The annotated RMS
+is computed on every point, clipped or not, and `skill_scatter_summary()` prints
+the outside-view fraction alongside it.
+
+### Layout notes
+
+- 2x2 gridspec, `figsize=(15, 12)`, `hspace=0.22` / `wspace=0.28`. (a) is a
+  cartopy axes at its projection's own aspect and so cannot fill its cell
+  horizontally; `set_aspect('auto')` (the fig7 fix) was deliberately **not**
+  applied here, because unlike fig7's cells this one isn't sized to the map, so
+  'auto' would visibly stretch the Lambert projection. The row gap was tightened
+  instead.
+- (a) reuses `plot_sigma_patm_map` with `levels=linspace(0, 20, 11)`, ticks
+  `[0, 10, 20]` — an order of magnitude above Fig. 9a's 0-2, which is the point
+  of the panel. SPNA-window values are 1.8-22 hPa, median 9.5.
+- (c)'s two legends sit **above** the axes (shade key lower-left, hatch key
+  lower-right) rather than in the right margin as in Fig. 9 — in a 2x2 the right
+  margin of (c) is the narrow inter-column gap and would collide with (d). Its
+  bars also get `ylim (0, 1.18)` headroom (yticks still 0/0.5/1) so the panel
+  letter has blank space to sit in. **Unverified**: (c) has never rendered with
+  real bars, so treat that placement as a first guess to check on the rebuild.
+- Verified end-to-end (real render, `module load texlive` + `esmpy_3.10`), not
+  by inspection. PDF font embedding checked with the project's standard `grep -a
+  -o '/Subtype */Type[0-9C]*\|/FontFile[0-9]*'` recipe: 7 x `/FontFile` + 7 x
+  `/Subtype /Type1`, real embedded fonts. The scatter is `rasterized=True`, so
+  the PDF is 675 KB despite ~250k points. Current render:
+  `figures/output/figB_patm_std_4panel.png`/`.pdf`.
+
+### Next steps
+
+- **Needs from the other machine**: the `xx_*.effective` control set +
+  `data.ctrl`/`data.ecco` for all std regions, and the `subgyre/` run. With
+  those in place the rebuild is `python -m
+  smartosse.figures.gen_appendixB_skill_cache --regions subgyre` followed by
+  `python -m smartosse.figures.figB_patm_std_4panel`.
+- Repoint `data_ctrl_dir_std/data.ctrl:66` at the `_Pa` weight before (c) is
+  trusted (see above).
+- Not wired into the manuscript. `sections/appendix.tex`'s Appendix B is still
+  the *old* spread-based "Atmospheric pressure uncertainty" text + the
+  `patm_delta_vs_sigma.png` figure; swapping in this figure means rewriting that
+  section, which also has to fix the causality error flagged on 2026-08-06.
+- `figB_patm_std_4panel.py` / `gen_appendixB_skill_cache.py` untracked in git,
+  like the other per-figure modules here.
+
+## Update 2026-08-06: Appendix B rerun — unit bug in the day-to-day-std
+## weight file, a duplicated std run, and the planned Appendix B figure
+
+**Read this before rebuilding Appendix B or re-running anything under
+`runc68v_froman_partialcables_jrastd_daytoday/`.** Two defects in the existing
+std-prior run set were found while checking whether an Appendix B twin of
+Fig. 9 would work. Both invalidate parts of the drafted Appendix B text.
+
+### 1. `wApressure_jra2012_daytoday_std.bin` was written in hPa, model wants Pa
+
+The file stores `w = sigma_hPa^-2`. MITgcm's `xx_apressure` control is in Pa,
+so every `jrastd_daytoday` OSSE ran with an effective sigma_patm of ~8.5 Pa
+(0.085 hPa) -- **100x tighter** than the intended ~8.5 hPa day-to-day std, and
+~40x tighter than the spread prior (ASTE median 3.4 hPa) rather than ~2.7x
+looser. Decoding the .bin as `w^-1/2` gives min 0.465 / med 9.12 / max 19.53,
+against the independently computed day-to-day std in
+`data/sigma_patm_std_2012_daytoday.nc` of min 0.462 / med 5.03 / max 21.96
+**hPa** -- the min agrees to three decimals. (Medians differ by design: the
+.bin is ASTE-only/high-latitude, the .nc is global.) The other two weight
+files in that directory are unambiguously Pa-based (`w^-1/2` mean 164 Pa and
+1448 Pa).
+
+Confirmed against what the runs actually did -- max |dp_atm| over the domain,
+iter 20: std runs LS 0.015 / SPG 0.035 / NS 0.035 / Nfl 0.006 hPa, vs spread
+runs LS 2.66 / SPG 0.83 / NS 0.43 / Nfl 0.91 hPa.
+
+**This inverts the drafted Appendix B causality.** "Under this larger
+uncertainty, OSSEs attain down-weighted p_atm adjustments" gets the observed
+direction right but the mechanism backwards: with a genuinely larger sigma the
+p_atm control is *cheaper*, so adjustments grow and p_atm's relcon share
+rises. The observed drop (p_atm 0.49-0.64 -> 0.37-0.49, wind taking up the
+slack) is the signature of a much *tighter* prior.
+
+**Fix shipped**: `gen_patm_daytoday_weight_Pa.py` writes
+`wApressure_jra2012_daytoday_std_Pa.bin` next to the original (`w_new = w_old
+* 1e-4`, applied to the raw `>f4` stream so the ASTE compact layout is
+byte-identical apart from the scaling; zeros/land mask untouched, max relative
+error 0.0). Verified: sigma_new = 46.5-1953 Pa (med 9.1 hPa) against the .nc's
+46.2-2196 Pa; at the cable sensors it gives LS 10.7 / SPG 9.1 / NS 15.9 /
+Nfl 7.4 hPa against the .nc's 14.6 / 14.3 / 15.6 / 6.3 hPa at the same
+lon/lats -- same order and same across-cable ordering (NS largest, Nfl
+smallest), residual differences attributable to the EXF regrid onto ASTE and
+nearest-neighbour sampling. That is ~15x the spread prior at the same sensors
+(0.57-0.75 hPa), i.e. genuinely the "larger, variability-based alternative".
+The original .bin is deliberately left in place -- it is what the existing
+(mis-weighted) runs used, so deleting it makes them unreproducible. Point
+`data_ctrl_dir_std/data.ctrl`'s `xx_gentim2d_weight(8)` at the new file before
+re-running.
+
+Matt is re-running the OSSEs on another machine with this file, and outputting
+**salinity for labsea iters 0 and 20** (see item 3).
+
+**Unverified, flagged not chased:** `data_ctrl_dir_std/data.ctrl:66` currently
+reads `xx_gentim2d_weight(8) = 'wApressure_ASTE270_EXFpress_std_new.bin'` --
+the *sub-daily* std file, not the day-to-day one the `jrastd_daytoday` runs
+were built around. Either that template was reverted after those runs, or the
+runs used a different data.ctrl. This matters beyond the rerun:
+`load_relcon_per_region()` reads `DATA_CTRL_DIR_STD` to weight the std runs'
+control costs, so if the dir names a weight the run didn't use, panel (c)'s
+STD bars are computed against the wrong sigma. Confirm which weight each std
+run actually used before trusting any STD relcon number, old or new.
+
+### 2. SPG and NS are the same run in the std set
+
+Under `runc68v_froman_partialcables_jrastd_daytoday/201201/`, `subgyre/` and
+`northsea/` are bit-identical at **both** iter0000 and iter0020 --
+`xx_apressure`, `xx_uwind`, `m_bpday`, `bpdifanom_smooth` all match, same
+mtimes (2026-07-21 01:57). `load_relcon_per_region()` returns identical values
+to 4 dp for the two (`other=0.0841 patm=0.3813 winds=0.5346`), so this is
+already visible in the existing 2x2 `fig9_patm_unc.py` STD bars. The four
+spread runs are all distinct. One of the two needs re-running.
+
+Don't try to identify which one is the duplicate from `data.ecco`: it names
+the *labsea* obs file in every directory of *both* run sets, so it is a stale
+template copy and carries no information about the region.
+
+### 3. ADV_fw is not computable from the existing std runs
+
+The `jrastd_daytoday` runs archived only `state_2d_set1` (PHIBOT etc.) and
+`trsp_3d_set1` (UVELMASS, VVELMASS) -- no `state_3d_set1`, hence no salinity,
+hence no ADV_fw. `gates_corrected_jraspread.csv` and
+`gates_corrected_jrastd.csv` both exist in `output/davis_strait/`, but the
+latter is the **old** `runc68v_froman_partialcables_jrastd` run (sub-daily std
+prior), NOT `_daytoday`, so it cannot be quoted as Appendix B's std run.
+Once labsea is re-run with salinity, `python gates_corrected.py
+jrastd_daytoday` produces the CSV (the script takes a run tag on argv).
+
+Cheaper argument that needs no rerun, and worth making regardless: Table 4's
+own p_atm-on/off columns already show that switching the p_atm control **off
+entirely** moves gateway bias reduction by <=0.2 pp (40.1->40.2, 27.4->27.4,
+34.7->34.7, 4.4->4.4) and skill by <=0.1 pp. If deleting the control changes
+nothing, re-weighting it cannot.
+
+### The planned Appendix B figure (Matt approved the panel (d) idea 2026-08-06)
+
+One 4-panel figure, deliberately mirroring Fig. 9 panel-for-panel so a reader
+can flip between them, plus one new panel carrying the QoI claim:
+
+- **(a) sigma_patm map, day-to-day std.** Same projection, cable dots and
+  colorbar geometry as Fig. 9a, range 0-20 hPa instead of 0-2. Beyond the
+  appendix this answers R2's original complaint head-on: it puts the ~8-15 hPa
+  daily-p_atm std they said should be there on the page, labelled as
+  day-to-day std of daily means, while Fig. 9a is labelled as inter-reanalysis
+  spread. The two figures side by side *are* the clarification they asked for.
+- **(b) Global max |dp_atm|/sigma_patm, four cables.** Identical axes, shading
+  and ylim (0-1.7) to Fig. 9b. Free: `fig9_spread_3panel.load_global_ratio_
+  series` already takes `run_dir_root` -- pass `RUN_DIR_ROOT_STD` and the new
+  `load_sigma_patm_std()`. Keep it a separate panel rather than overlaying on
+  Fig. 9b; identical ylim lets the eye do the comparison without a
+  solid/dashed key that risks re-triggering "unclear what is plotted".
+- **(c) Paired relcon bars**, std (hatched) vs spread (plain), one pair per
+  cable. Carries "redistributes the attribution between wind and pressure".
+  `fig9_patm_unc.plot_relcon_bars_grouped` already does exactly this and is
+  tested -- don't rebuild it.
+- **(d) 1:1 scatter of skill, std vs spread.** THE PANEL THAT BACKS THE
+  "QoIs change negligibly" SENTENCE. x = skill in the spread OSSE, y = skill
+  in the std OSSE, over SPNA grid points, four cables pooled, p_b and V_bt as
+  two colors, 1:1 line, annotate RMS deviation from the line. Everything on
+  the diagonal *is* "changes negligibly", stated quantitatively in one panel.
+  Preferred over a row of four skill-difference maps: those eat four panels
+  and a near-empty diverging map invites "what's that patch?".
+
+ADV_fw stays out of the figure -- caption/text numbers only, per item 3.
+
+Buildability: (a), (b), (c) load from data on disk. (d) needs p_b and V_bt
+skill for the four std runs, computable from `state_2d_set1` PHIBOT and
+`trsp_3d_set1` via `smartosse.osse.OSSE`/`MultiOSSE` -- nothing missing. Note
+Fig. 5's own source is **not in the repo** (no `.py` references
+`regions_skill_bp_and_uvbt`; it came from a notebook), so (d) means writing
+that skill computation fresh rather than reusing it.
+
+## Update 2026-08-05: `fig9_spread_3panel.py` — legend to 3x2, PDF output, `__main__`
+
+**Read this before touching Fig. 9.** The figure the manuscript actually
+includes is no longer `fig9_patm_unc.py`'s 2x2 mosaic. It is
+`fig9_spread_3panel.py`, a spread-only 1x3 rendition ((a) sigma_patm map,
+(b) global max |dp_atm|/sigma_patm, (c) per-cable relcon bars), and
+`tex/sections/controls.tex:22` includes its output as
+`figures/fig9_spread_3panel_test.png`. All the 2026-07-13 entries below
+describe the 2x2 layout and apply to Fig. 9 only through the loaders and
+low-level helpers the 3-panel module imports from it.
+
+This session (Matt's asks):
+
+- **PDF as well as PNG.** The module had no `__main__` block -- the previous
+  render came from an ad-hoc driver that no longer exists -- so it now has
+  one, following `fig1_global_cables.py`'s pattern: `use_latex_times()` +
+  `use_embedded_pdf_fonts()`, `open_astedataset()`, then both files. Run as
+  `module load texlive && conda activate .../esmpy_3.10 && python -m
+  smartosse.figures.fig9_spread_3panel` (~3 min). Output goes NEXT TO the
+  module, not under `output/`, because that is where controls.tex's
+  `\includegraphics` path resolves (`tex/figures` symlinks to `figures/`).
+  PDF font embedding checked with the project's standard recipe: 8 x
+  `/FontFile` + `/Subtype /Type1`, i.e. real embedded fonts, not Type 3.
+  **This closes the "serif + embedded-font PDF" TODO for Fig. 9** (see
+  `smartosse-manuscript/README.md`).
+- **Panel (b) legend 2x3 -> 3x2, larger.** `ncol=3 -> 2`, fontsize `14 -> 18`
+  (new `RATIO_LEGEND_FONTSIZE`), grey band swatch alone on the bottom row.
+  matplotlib fills legend cells COLUMN-major, so the on-screen row layout is
+  NOT the handle order: getting LS/SPG on row 1, NS/Nfl on row 2 and the band
+  on row 3 means handing it the columns, `[LS, NS, band]` then `[SPG, Nfl]`,
+  i.e. the permutation `(0, 2, 4, 1, 3)` of the natural order. That is what
+  the new `legend_handle_order` kwarg on `plot_patm_adjustment_ratio` is for.
+- **ylim 1.45 -> 1.7** (`RATIO_YLIM`). The legend has to sit in the
+  guaranteed-empty strip above the ratio=1 line (no curve can enter it by
+  construction); three rows at 18 pt did not fit in the old headroom. Curves
+  unaffected.
+
+**Still stale, flagged not fixed:** the caption in `controls.tex` still
+describes the OLD panel (b) -- "maximum absolute adjustment across the cable
+sensors" against a "constant spread-based uncertainty envelope" -- which is
+not what the panel plots (it is the whole-domain max, normalized pointwise by
+sigma_patm). Needs rewriting before submission.
+
+## Update 2026-07-13 (latest for the 2x2 `fig9_patm_unc.py`): (c) legend height, split the difference
 
 `0.22` (previous update) read as too high to Matt. Settled on the midpoint
 between the two tried values, `bbox_to_anchor=(1.0, 0.175)` (halfway between
@@ -950,3 +2222,28 @@ past labsea/subgyre STD until this is synced.**
    themselves are now resolved (see "Update 2026-07-12" above) — remaining
    work there is just `vmin`/`vmax`/`levels` tuning for the submission, not
    data/alignment.
+
+---
+
+# Davis Strait / gateway freshwater diagnostics — see the dedicated doc
+
+Not a figure-styling thread, so it is kept out of this file: the gateway
+transport recompute (the published Table 4 quantity was not a section-normal
+flux), the Nares gate truncation, the corrected Table 4, the Fig. 7d
+`get_advfw` fix, and the 2026-08-05 p_b -> volume transport -> ADV_fw chain
+diagnostics all live in **`DavisStrait_fw_decompisition_plan.md`** in this
+directory. Read that before touching Fig. 6, Fig. 7, Table 4, or
+`tex/sections/case_study.tex`.
+
+Scripts in this directory belonging to that thread:
+`gen_gate_caches.py`, `gates_corrected.py`, `gates_significance.py`,
+`gate_sign_probe.py`, `gates_surface_layer.py`,
+`gates_surface_nares_detail.py`, `nares_along_channel.py`,
+`nares_gate_corrected.py`, `davis_strait_*.py`, and the newest pair
+`davis_chain_extract.py` / `davis_chain_figs.py`.
+
+One item from that thread DOES affect a figure in this file:
+`osse.ForecastModel._load_fm_bt` computes `UVELMASS * hFacW * dyG * drF`, but
+`UVELMASS` is already `u*hFacW`, so partial bottom cells are squared. That is
+Fig. 6's own barotropic-velocity quantity. Small (bottom cells only) and not
+yet fixed.

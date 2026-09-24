@@ -61,7 +61,8 @@ def add_cable_scatter(ax, lons, lats, s=10, edgecolor='k', facecolor='w',
 
 
 def style_colorbar(cb, xlabel=None, nticks=3, fontsize=16, labelsize=None,
-                    ticks=None, ticklabels=None, height_frac=None, y_shift_frac=None):
+                    ticks=None, ticklabels=None, decimals=None,
+                    height_frac=None, y_shift_frac=None):
     """Apply consistent tick count/labels + an xlabel to a plotpc colorbar.
 
     Defaults to `nticks` evenly spaced ticks over the colorbar's own
@@ -69,6 +70,11 @@ def style_colorbar(cb, xlabel=None, nticks=3, fontsize=16, labelsize=None,
     fixed [0, 0.5, 1] for a ratio panel). Ticks are only auto-formatted with
     plain decimal labels here -- for scientific-notation or integer labels,
     pass `ticklabels` explicitly.
+
+    `decimals` fixes the number of decimal places in the auto-generated labels
+    (e.g. `decimals=2` gives '-0.50' rather than the default `%g`'s '-0.5'),
+    so panels sharing a figure can't end up with ragged label precision. Zero
+    stays plain '0' either way. Ignored when `ticklabels` is passed.
 
     `height_frac`/`y_shift_frac` reproduce the manual colorbar shrink-and-
     nudge from the original fig10 notebook (needed there because
@@ -87,7 +93,8 @@ def style_colorbar(cb, xlabel=None, nticks=3, fontsize=16, labelsize=None,
     cb.set_ticks(ticks)
 
     if ticklabels is None:
-        ticklabels = ["0" if t == 0 else f"{t:g}" for t in ticks]
+        fmt = (lambda t: f'{t:g}') if decimals is None else (lambda t: f'{t:.{decimals}f}')
+        ticklabels = ["0" if t == 0 else fmt(t) for t in ticks]
     cb.set_ticklabels(ticklabels)
 
     if labelsize is not None:
@@ -164,3 +171,53 @@ def use_embedded_pdf_fonts():
     """
     import matplotlib.pyplot as plt
     plt.rcParams.update({'pdf.fonttype': 42, 'ps.fonttype': 42})
+
+
+def patch_pdf_indexed_image_bitdepth():
+    """Work around a matplotlib < 3.5 PDF bug that corrupts *rasterized* panels.
+
+    Symptom: a PDF containing rasterized artists (``set_rasterized(True)`` on
+    ``contourf`` collections, ``rasterized=True`` on a ``pcolormesh``) opens
+    blank / half-drawn / "damaged" in Acrobat, while the PNG of the same figure
+    is perfect.
+
+    Cause: when a rasterized image has <= 256 distinct colors,
+    ``backend_pdf.PdfFile._writeImg`` re-encodes it as a palette
+    (``/Indexed /DeviceRGB``) PNG. Pillow then packs the samples at the
+    smallest sufficient depth -- 4 bits/pixel for a 16-color panel -- and
+    matplotlib records that in the image dict as ``/BitsPerComponent 4``, but
+    it writes the Flate ``/DecodeParms`` as::
+
+        << /Colors 1 /Columns <width> /Predictor 10 >>
+
+    with no ``/BitsPerComponent``. Per the PDF spec that key *defaults to 8*,
+    so a conforming reader unfilters the PNG predictor with a row stride twice
+    the real one and the image stream fails to decode. Matplotlib's own Agg
+    path never re-reads the file, which is why the PNG looks fine and only the
+    PDF is broken. Fixed upstream in matplotlib 3.5; this env is on 3.4.3.
+
+    The patch copies the image dict's ``BitsPerComponent`` into the
+    ``DecodeParms`` whenever the two would otherwise disagree. It is idempotent
+    and a no-op on a matplotlib that already emits the key, so it is safe to
+    call unconditionally -- e.g. next to `use_embedded_pdf_fonts` in a figure
+    module's ``__main__``.
+    """
+    from matplotlib.backends import backend_pdf
+
+    if getattr(backend_pdf.PdfFile.beginStream, '_smartosse_bpc_patch', False):
+        return backend_pdf.PdfFile.beginStream
+
+    original = backend_pdf.PdfFile.beginStream
+
+    def beginStream(self, id, len, extra=None, png=None):
+        if png is not None and extra is not None:
+            bpc = extra.get('BitsPerComponent')
+            # `png` is written verbatim as /DecodeParms; only the sub-8-bit
+            # (palette) case disagrees with the spec's default of 8.
+            if bpc is not None and bpc != 8 and 'BitsPerComponent' not in png:
+                png = {**png, 'BitsPerComponent': bpc}
+        return original(self, id, len, extra, png)
+
+    beginStream._smartosse_bpc_patch = True
+    backend_pdf.PdfFile.beginStream = beginStream
+    return original

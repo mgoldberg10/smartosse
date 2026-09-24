@@ -51,6 +51,67 @@ and the "no more than about 50%" claim in controls.tex); pass
 ``vmax_ratio=0.11`` if you need to reproduce the currently-published PNG
 exactly.
 
+NOTE (panel subsets): ``make_fig10(ds, panels='abcd')`` builds just the top
+2x2 -- the four map panels that reproduce the currently-published
+fig:misfit_and_apressure -- skipping the (slow) eta OSSE load entirely, since
+nothing in (a)-(d) depends on it. Panel content/styling is identical to the
+full 3x2; the only layout differences are the grid shape, the default
+figsize, and (d) keeping its bottom longitude labels (in the 3x2 they're
+hidden only because (f) sits directly below it).
+
+How to run
+----------
+::
+
+    module load texlive
+    conda activate /work2/08381/goldberg/ls6/miniforge3/envs/esmpy_3.10
+    cd /work2/08381/goldberg/ls6/smartosse
+    python -m smartosse.figures.fig10_patm_mechanism                  # full 3x2
+    python -m smartosse.figures.fig10_patm_mechanism --panels abcd    # top 2x2
+
+Writes ``output/fig10_patm_mechanism.{png,pdf}`` (full) or
+``output/fig10_patm_mechanism_abcd.{png,pdf}`` (subset).
+
+NOTE (run/sigma drift -- read before trusting a fresh render): ``RUN_DIR`` and
+``load_sigma_patm_std`` come from ``fig9_patm_unc``, and both were repointed
+after this figure was last rendered (2026-07-13) -- onto the
+``jrastd_daytoday`` run and the ``wApressure_jra2012_daytoday_std.bin`` prior,
+which is the file with the hPa-vs-Pa unit bug (see
+``gen_patm_daytoday_weight_Pa.py`` and STATUS.md 2026-08-06). With those
+defaults panels (c)/(d) are badly off scale. To reproduce the *published*
+fig:misfit_and_apressure panels, pass the sub-daily-std run and prior::
+
+    python -m smartosse.figures.fig10_patm_mechanism --panels abcd \
+        --run-dir /scratch/08381/goldberg/aste_270x450x180/osses/\
+runc68v_froman_partialcables_jrastd/201201/subgyre/ \
+        --sigma-file /work2/08381/goldberg/ls6/aste_270x450x180/run_template/\
+input_weight/wApressure_ASTE270_EXFpress_std_new.bin \
+        --patm-iternums 1 20
+
+NOTE (spread-prior variant): the reanalysis-SPREAD counterpart of (a)-(d) --
+i.e. the notebook's
+``subgyre_wmisfit_apressure_SPREAD_jan012012_opt0_opt20_ONLY_stdUncRatio.png``
+-- is the ``runc68v_froman_partialcables_jraspread`` run with the notebook's
+own color limits (its adjustments are ~8x smaller than the std run's, so 4 hPa
+would show almost nothing in (c))::
+
+    python -m smartosse.figures.fig10_patm_mechanism --panels abcd \
+        --run-dir /scratch/08381/goldberg/aste_270x450x180/osses/\
+runc68v_froman_partialcables_jraspread/201201/subgyre/ \
+        --sigma-file /work2/08381/goldberg/ls6/aste_270x450x180/run_template/\
+input_weight/wApressure_ASTE270_EXFpress_std_new.bin \
+        --patm-iternums 1 20 --vmax-ctrl 0.5 \
+        --vmax-ratio 0.051 --ratio-cbar-ticks 0 0.05 \
+        --cbar-decimals 2 --gl-labels perimeter \
+        --out-name fig10_patm_mechanism_abcd_spread
+
+Note that this reproduces the notebook exactly, and the notebook divides the
+SPREAD run's adjustments by the **std** sigma in panel (d) (its ``spread=True``
+branch loads ``wApressure_ASTE270_EXFpress_std_new.bin``; hence "stdUncRatio"
+in the filename). For (d) against the prior that run actually used, pass
+``--sigma-file .../wApressure_ASTE270_jra55_jra3q_era_spread.bin --vmax-ratio
+0.15 --ratio-cbar-ticks 0 0.15``. See STATUS.md 2026-08-17 (later).
+
 NOTE (fonts): call ``figs_utils.use_serif_mathtext()`` once in your notebook
 before plotting to get serif-rendered panel letters and math-mode axis
 labels (e.g. panel (f)'s x/y labels) while leaving cartopy lat/lon gridline
@@ -60,6 +121,7 @@ notebook cell, which would have made *all* text (including tick numbers)
 serif.
 """
 import copy
+import os
 
 import numpy as np
 import xarray as xr
@@ -88,6 +150,31 @@ ETA_NR_DIR = '/scratch/08381/goldberg/llc_4320/eta_coarse/eta_daily/'
 MO_STR = '201201'
 RHO, G = 1029., 9.81
 
+# sigma_phibot [cm], the p_b misfit weight's error file. `BPReader.read_weight`
+# normally finds this by parsing `gencost_errfile` out of the run's
+# `iter0000/data.ecco`, but the jrastd_daytoday reruns on /scratch shipped only
+# their bp/diags output -- no data.ecco, and no run-local copy of the errfile --
+# so the constructor raises. This is the canonical /work copy of that same
+# field (byte-identical, md5 c2894df2..., to the run-local copies that survive
+# in the sibling BADrunc68v_... tree, and it is the same file for every region,
+# so nothing region-specific is lost by reading it from here). Same purge
+# workaround, and same reason, as fig3_bp_std.load_cable_sensor_lonlat and
+# gen_appendixB_skill_cache.load_bp_anom.
+BP_SIGMA_FILE = ('/work/08381/goldberg/ls6/aste_270x450x180/run_template/'
+                 'input_ecco/smart_phibot/'
+                 'bp_var_day_coarse4320_detide16constituent_std_cm.bin')
+
+OUT_DIR = os.path.join(os.path.dirname(__file__), 'output')
+FIG_NAME = 'fig10_patm_mechanism'
+
+# Panel sets make_fig10 knows how to lay out, and the default figsize for each.
+# 'abcd' is the top 2x2 (the four map panels of the published
+# fig:misfit_and_apressure); 'abcdef' is the full 3x2.
+PANEL_SETS = {
+    'abcd':   dict(nrows=2, figsize=(11, 10)),
+    'abcdef': dict(nrows=3, figsize=(11, 15)),
+}
+
 # spna()'s own gl_label_args default (plot.py) -- kept here so panel (c) can
 # override just the 'bottom' (longitude) entry without silently losing the
 # other three (spna() replaces gl_label_args wholesale, it doesn't merge).
@@ -104,14 +191,48 @@ SPNA_GL_ARGS_DEFAULT = {
 # Loaders
 # =============================================================================
 
-def load_bp_misfit_maps(run_dir=RUN_DIR, iternums=(0, 20), time=1, ecco_frequency='day'):
+def _attach_weight_from_sigma_file(bpr, sigma_file=BP_SIGMA_FILE):
+    """Set `bpr.ds['sigma']`/`['weight']` from a standalone errfile binary,
+    reproducing the last two lines of ``BPReader.read_weight`` verbatim (only
+    the way the file is *located* differs -- see BP_SIGMA_FILE)."""
+    sigma = read_aste_bin(sigma_file, var_name='sigma')
+    bpr.ds['sigma'] = sigma.where(sigma != -9999.).squeeze()
+    bpr.ds['weight'] = bpr.ds.sigma.where((bpr.ds.sigma != 0)
+                                          & ~np.isnan(bpr.ds.sigma)) ** -2
+    return bpr
+
+
+def load_bp_misfit_maps(run_dir=RUN_DIR, iternums=(0, 20), time=1, ecco_frequency='day',
+                         sigma_file=BP_SIGMA_FILE):
     """(a)/(b): BPReader + the smoothed, weighted p_b misfit field on one day,
     before and after optimization.
 
     Returns (bpr, misfit_before, misfit_after). `bpr` carries `.sensor_args`
     for the cable-scatter overlay used on every panel.
+
+    If the run directory has no ``data.ecco`` (true of the jrastd_daytoday
+    reruns as of 2026-08-17, though not when this module was first written),
+    the reader is built with ``read_weight`` stubbed out and the weight is
+    attached afterwards from `sigma_file` -- identical numbers, since that is
+    the same field ``data.ecco`` would have pointed at.
     """
-    bpr = BPReader(run_dir, iternums=list(iternums), ecco_frequency=ecco_frequency)
+    try:
+        bpr = BPReader(run_dir, iternums=list(iternums), ecco_frequency=ecco_frequency)
+    except FileNotFoundError as exc:
+        if 'data.ecco' not in str(exc):
+            raise
+        print(f'[fig10] no data.ecco in {run_dir}; taking the misfit weight from '
+              f'{sigma_file}', flush=True)
+        read_weight = BPReader.read_weight
+        BPReader.read_weight = lambda self, *a, **kw: None
+        try:
+            # get_cost() (called from __post_init__) still runs and still sets
+            # .sensor_args; it just bails on the now-absent 'sigma' instead of
+            # computing self.cost -- which nothing here consumes anyway.
+            bpr = BPReader(run_dir, iternums=list(iternums), ecco_frequency=ecco_frequency)
+        finally:
+            BPReader.read_weight = read_weight
+        _attach_weight_from_sigma_file(bpr, sigma_file)
     ds0 = bpr.ds.isel(ioptim=0)
     ds1 = bpr.ds.isel(ioptim=-1)
     misfit_before = (ds0.bpdifanom_smooth * ds0.weight).isel(time=time)
@@ -304,13 +425,31 @@ def make_fig10(
     vmax_eta_skill=1.,
     nlev_eta_skill=20,
     eta_skill_cbar_ticks=None,
-    figsize=(11, 15),
+    ratio_cbar_ticks=None,
+    cbar_decimals=None,
+    gl_labels=None,
+    patm_iternums=(1, 20),
+    panels='abcdef',
+    figsize=None,
+    hspace=0.3,
+    wspace=0.15,
     cbar_height_frac=0.9,
     cbar_y_shift_frac=None,
     gl_fontsize=13,
     panel_scatter_shrink=0.85,
 ):
-    """Assemble the full 3x2 mosaic from already-loaded pieces.
+    """Assemble the 3x2 mosaic (or a subset of it) from already-loaded pieces.
+
+    `panels` selects which panels to build -- ``'abcdef'`` (default) for the
+    full 3x2, or ``'abcd'`` for just the top 2x2 map row-pair. With
+    ``'abcd'`` the eta OSSE and the IB scatter are never loaded or computed
+    (nothing in (a)-(d) uses them), so `eta_osse`/`ib_scatter` can be left
+    None even without a loaded OSSE in hand; panel content and styling are
+    otherwise byte-for-byte the same code path as in the full figure. The one
+    deliberate layout difference: (d) keeps its bottom (longitude) gridline
+    labels, which the full figure hides only because (f) sits directly below
+    it. `figsize=None` picks the default for the chosen panel set (see
+    PANEL_SETS).
 
     Pass in sigma/bp_misfit/patm_adjustment/eta_osse/ib_scatter explicitly
     (e.g. from the load_*/compute_* functions above) rather than having this
@@ -326,6 +465,12 @@ def make_fig10(
     `gl_fontsize` sets every map panel's cartopy lat/lon gridline label size
     (spna()'s own default is 20, quite large for a 3x2 mosaic).
 
+    `cbar_decimals` fixes every colorbar's tick-label precision (2 -> '-0.50',
+    '0.05'; 0 always stays '0'), and `gl_labels='perimeter'` drops the interior
+    lat/lon ticklabels so only the left column carries latitudes and only the
+    bottom row longitudes -- the original notebook's framing, available for
+    ``panels='abcd'`` only. Both default to the pre-existing behavior.
+
     `nlev_eta_skill`/`eta_skill_cbar_ticks` control panel (f)'s (eta skill)
     contourf level count and colorbar tick placement independently of the
     other map panels -- `eta_skill_cbar_ticks=None` falls back to
@@ -340,15 +485,43 @@ def make_fig10(
     colorbar, so (e)'s square would otherwise be centered in a taller box
     than (f)'s and sit too low. Set to 1.0 to disable.
     """
+    if panels not in PANEL_SETS:
+        raise ValueError(f'panels={panels!r} not supported; '
+                         f'expected one of {sorted(PANEL_SETS)}')
+    nrows = PANEL_SETS[panels]['nrows']
+    figsize = figsize if figsize is not None else PANEL_SETS[panels]['figsize']
+
+    # 'perimeter' = lat labels on the left column only, lon labels on the
+    # bottom row only (the original notebook's framing); 'all' = every map
+    # panel labels its own left/bottom edges, which is what the 3x2 has always
+    # done. Only the 2x2 has an unambiguous perimeter (in the 3x2, (c)'s bottom
+    # edge is interior to a row whose left panel is the plain-axes scatter), so
+    # perimeter mode is restricted to `panels='abcd'`. Default stays 'all' so
+    # the published-config renders keep matching the published 3x2's framing,
+    # in which every panel labels its own edges.
+    gl_labels = gl_labels if gl_labels is not None else 'all'
+    if gl_labels not in ('perimeter', 'all'):
+        raise ValueError(f"gl_labels={gl_labels!r}; expected 'perimeter' or 'all'")
+    if gl_labels == 'perimeter' and nrows != 2:
+        raise ValueError("gl_labels='perimeter' is only defined for panels='abcd'")
+
     sigma = sigma if sigma is not None else load_sigma_patm_std()
     bp_misfit = bp_misfit if bp_misfit is not None else load_bp_misfit_maps(run_dir, time=time)
     bpr, misfit_before, misfit_after = bp_misfit
 
+    # `patm_iternums` only exists because iter0001 has since been purged from
+    # the subgyre run on /scratch (only 0 and 20 survive). Every consumer of
+    # these knots indexes `ioptim=-1`, i.e. the *last* iteration, so the first
+    # entry is inert for the figure -- pass (0, 20) when iter0001 is gone.
     patm_adjustment = (patm_adjustment if patm_adjustment is not None
-                        else load_patm_adjustment_knots(run_dir))
-    eta_osse = eta_osse if eta_osse is not None else load_eta_osse(run_dir)
-    ib_scatter = (ib_scatter if ib_scatter is not None
-                  else compute_ib_scatter(eta_osse, patm_adjustment))
+                        else load_patm_adjustment_knots(run_dir, iternums=patm_iternums))
+
+    # Row 3 only. Guarded so the 'abcd' subset never pays for the slow eta
+    # OSSE read (nor requires the eta nature run to be on disk at all).
+    if 'e' in panels or 'f' in panels:
+        eta_osse = eta_osse if eta_osse is not None else load_eta_osse(run_dir)
+        ib_scatter = (ib_scatter if ib_scatter is not None
+                      else compute_ib_scatter(eta_osse, patm_adjustment))
 
     cable_lons, cable_lats = [ds[c].isel(bpr.sensor_args).values for c in ('XC', 'YC')]
 
@@ -357,16 +530,18 @@ def make_fig10(
     spna_proj = ccrs.LambertConformal(central_longitude=-35, central_latitude=60)
 
     fig = plt.figure(figsize=figsize)
-    gs = fig.add_gridspec(3, 2, hspace=0.3, wspace=0.15)
+    gs = fig.add_gridspec(nrows, 2, hspace=hspace, wspace=wspace)
 
     ax_a = fig.add_subplot(gs[0, 0], projection=spna_proj)
     ax_b = fig.add_subplot(gs[0, 1], projection=spna_proj)
     ax_c = fig.add_subplot(gs[1, 0], projection=spna_proj)
     ax_d = fig.add_subplot(gs[1, 1], projection=spna_proj)
-    ax_e = fig.add_subplot(gs[2, 0])                        # IB scatter (plain axes)
-    ax_f = fig.add_subplot(gs[2, 1], projection=spna_proj)  # eta skill (map)
+    ax_e = ax_f = None
+    if nrows == 3:
+        ax_e = fig.add_subplot(gs[2, 0])                        # IB scatter (plain axes)
+        ax_f = fig.add_subplot(gs[2, 1], projection=spna_proj)  # eta skill (map)
 
-    if panel_scatter_shrink != 1.:
+    if ax_e is not None and panel_scatter_shrink != 1.:
         # Shrink (e)'s raw gridspec cell *before* plot_ib_scatter's
         # aspect='equal' runs, anchored at the top-left so it stays flush
         # with (c)'s left edge while the (too-tall, colorbar-free) cell's
@@ -378,22 +553,38 @@ def make_fig10(
         new_h = pos_e.height * panel_scatter_shrink
         ax_e.set_position([pos_e.x0, pos_e.y1 - new_h, new_w, new_h])
 
-    def _gl_label_args(hide_bottom=False):
+    def _gl_label_args(hide_bottom=False, hide_left=False):
         args = copy.deepcopy(SPNA_GL_ARGS_DEFAULT)
         args['fontsize'] = gl_fontsize
         if hide_bottom:
             args['bottom'] = dict(args['bottom'], hide=True)
+        if hide_left:
+            args['left'] = dict(args['left'], hide=True)
         return args
 
-    map_axes = (ax_a, ax_b, ax_c, ax_d, ax_f)
-    for ax in map_axes:
-        spna(ax=ax, gl_label_args=_gl_label_args())
+    map_axes = tuple(ax for ax in (ax_a, ax_b, ax_c, ax_d, ax_f) if ax is not None)
 
-    # (d) sits directly above (f) -- another spatial/lat-lon panel -- so its
-    # own bottom (longitude) gridline labels would just duplicate (f)'s top
-    # border. Every other map panel keeps spna()'s normal bottom-lon/left-lat
-    # framing.
-    spna(ax=ax_d, gl_label_args=_gl_label_args(hide_bottom=True))
+    if gl_labels == 'perimeter':
+        # Perimeter-only framing (the original notebook's: latitudes on the
+        # left column, longitudes on the bottom row, nothing on the interior
+        # edges) -- so (a) keeps only its lat labels, (b) none, (c) both,
+        # (d) only its lon labels.
+        gl_by_ax = {ax_a: dict(hide_bottom=True),
+                    ax_b: dict(hide_bottom=True, hide_left=True),
+                    ax_c: {},
+                    ax_d: dict(hide_left=True)}
+        for ax in map_axes:
+            spna(ax=ax, gl_label_args=_gl_label_args(**gl_by_ax.get(ax, {})))
+    else:
+        for ax in map_axes:
+            spna(ax=ax, gl_label_args=_gl_label_args())
+
+        # (d) sits directly above (f) -- another spatial/lat-lon panel -- so its
+        # own bottom (longitude) gridline labels would just duplicate (f)'s top
+        # border. Every other map panel keeps spna()'s normal bottom-lon/left-lat
+        # framing. Without row 3, (d) is the bottom-right panel and keeps them.
+        if ax_f is not None:
+            spna(ax=ax_d, gl_label_args=_gl_label_args(hide_bottom=True))
 
     # (a), (b): misfit maps
     nlev = 27
@@ -418,15 +609,21 @@ def make_fig10(
     for ax in map_axes:
         add_cable_scatter(ax, cable_lons, cable_lats)
 
-    # (f): eta skill (moved here from (e)'s slot, see module NOTE)
-    _, ax_f, cb_f, _ = plot_eta_skill_map(eta_osse, ax=ax_f, vmax=vmax_eta_skill,
-                                           nlev=nlev_eta_skill)
+    cb_f = None
+    if ax_f is not None:
+        # (f): eta skill (moved here from (e)'s slot, see module NOTE)
+        _, ax_f, cb_f, _ = plot_eta_skill_map(eta_osse, ax=ax_f, vmax=vmax_eta_skill,
+                                               nlev=nlev_eta_skill)
 
-    # (e): IB scatter (moved here from (f)'s slot, see module NOTE) --
-    # aspect_anchor='NW' since this panel now sits in the left column.
-    plot_ib_scatter(ax_e, ib_scatter, aspect_anchor='NW')
+    if ax_e is not None:
+        # (e): IB scatter (moved here from (f)'s slot, see module NOTE) --
+        # aspect_anchor='NW' since this panel now sits in the left column.
+        plot_ib_scatter(ax_e, ib_scatter, aspect_anchor='NW')
 
-    for ax, letter in zip((ax_a, ax_b, ax_c, ax_d, ax_e, ax_f), 'abcdef'):
+    axes = dict(a=ax_a, b=ax_b, c=ax_c, d=ax_d, e=ax_e, f=ax_f)
+    axes = {k: v for k, v in axes.items() if v is not None}
+
+    for letter, ax in axes.items():
         # (e)'s hexbin fills its own top-left corner with dark viridis, unlike
         # the map panels whose top-left is always land/background -- give
         # just this label a white backing so it stays legible.
@@ -435,10 +632,107 @@ def make_fig10(
         add_panel_label(ax, letter, fontsize=24, **label_kwargs)
 
     cbar_xlabels = {'a': '', 'b': '', 'c': '[hPa]', 'd': '', 'f': ''}
-    cbar_ticks = {'f': eta_skill_cbar_ticks}
+    # `ratio_cbar_ticks` matters whenever vmax_ratio isn't a round number:
+    # style_colorbar's default 3 evenly spaced ticks over (0, vmax_ratio) gives
+    # e.g. '0.0255' for the notebook's vmax=0.051.
+    cbar_ticks = {'f': eta_skill_cbar_ticks, 'd': ratio_cbar_ticks}
     for letter, cb in zip('abcdf', (cb_a, cb_b, cb_c, cb_d, cb_f)):
+        if cb is None:   # (f) absent in the 'abcd' subset
+            continue
         style_colorbar(cb, xlabel=cbar_xlabels[letter], labelsize=14,
-                        ticks=cbar_ticks.get(letter),
+                        ticks=cbar_ticks.get(letter), decimals=cbar_decimals,
                         height_frac=cbar_height_frac, y_shift_frac=cbar_y_shift_frac)
 
-    return fig, dict(a=ax_a, b=ax_b, c=ax_c, d=ax_d, e=ax_e, f=ax_f)
+    return fig, axes
+
+
+if __name__ == '__main__':
+    import argparse
+
+    from ..dataset import open_astedataset
+    from .figs_utils import (use_latex_times, use_embedded_pdf_fonts,
+                             patch_pdf_indexed_image_bitdepth)
+
+    ap = argparse.ArgumentParser(description='Fig. 10: p_atm mechanism')
+    ap.add_argument('--panels', default='abcdef', choices=sorted(PANEL_SETS),
+                    help="'abcd' = top 2x2 map panels only (skips the slow "
+                         "eta OSSE load); 'abcdef' = full 3x2")
+    ap.add_argument('--run-dir', default=RUN_DIR)
+    ap.add_argument('--sigma-file', default=None,
+                    help='path to a wApressure_*.bin weight binary for panel '
+                         "(d)'s sigma_patm; default is fig9_patm_unc's current "
+                         'load_sigma_patm_std (the day-to-day prior). Pass the '
+                         'sub-daily-std file to match the published Fig. 10')
+    ap.add_argument('--vmax-misfit', type=float, default=0.01,
+                    help='panel (a)/(b) color limit (symmetric)')
+    ap.add_argument('--vmax-ctrl', type=float, default=4.,
+                    help='panel (c) color limit [hPa] (symmetric); 0.5 for the '
+                         'spread-prior run, whose adjustments are ~8x smaller')
+    ap.add_argument('--vmax-ratio', type=float, default=1.,
+                    help='panel (d) color limit for std(dp_atm)/sigma_patm')
+    ap.add_argument('--ratio-cbar-ticks', type=float, nargs='+', default=None,
+                    help='explicit panel (d) colorbar ticks; worth setting '
+                         'whenever --vmax-ratio is not a round number')
+    ap.add_argument('--figsize', type=float, nargs=2, default=None,
+                    metavar=('W', 'H'),
+                    help='figure size in inches; default is per --panels (see '
+                         'PANEL_SETS). Shrinking H tightens the inter-row gap, '
+                         'since the equal-aspect maps fill the cell width and '
+                         'leave any leftover cell height as whitespace')
+    ap.add_argument('--hspace', type=float, default=0.3,
+                    help='gridspec row spacing (fraction of mean axes height)')
+    ap.add_argument('--wspace', type=float, default=0.15,
+                    help='gridspec column spacing (fraction of mean axes width)')
+    ap.add_argument('--cbar-decimals', type=int, default=None,
+                    help='fix every colorbar tick label to this many decimal '
+                         "places (2 -> '-0.50' rather than '-0.5'); 0 stays '0'")
+    ap.add_argument('--gl-labels', default=None, choices=('all', 'perimeter'),
+                    help="'perimeter' puts lat labels on the left column and "
+                         'lon labels on the bottom row only, with no interior '
+                         "ticklabels (--panels abcd only); 'all' (default) "
+                         'labels every panel, matching the published 3x2')
+    ap.add_argument('--patm-iternums', type=int, nargs=2, default=(0, 20),
+                    metavar=('FIRST', 'LAST'),
+                    help='xx_apressure.effective iterations to read; only LAST '
+                         'is used by any panel. Defaults to (0, 20) because '
+                         "iter0001 (make_fig10's own default first entry) is no "
+                         'longer on /scratch')
+    ap.add_argument('--out-name', default=None,
+                    help='basename for the output png/pdf (default: '
+                         f'{FIG_NAME}, with a _<panels> suffix for subsets)')
+    args = ap.parse_args()
+
+    use_latex_times()
+    use_embedded_pdf_fonts()
+    # Idempotent no-op on matplotlib >= 3.5; required on this env's 3.4.3 if
+    # any panel is rasterized, or the PDF's palette-encoded images won't
+    # decode. See figs_utils.patch_pdf_indexed_image_bitdepth's docstring.
+    patch_pdf_indexed_image_bitdepth()
+
+    sigma = None
+    if args.sigma_file is not None:
+        from .fig9_patm_unc import load_sigma_patm
+        weight_dir, fname = os.path.split(args.sigma_file)
+        sigma = load_sigma_patm(fname, weight_dir=weight_dir)
+
+    ds = open_astedataset()
+    fig, _ = make_fig10(ds, run_dir=args.run_dir, panels=args.panels,
+                        sigma=sigma, patm_iternums=tuple(args.patm_iternums),
+                        vmax_misfit=args.vmax_misfit, vmax_ctrl=args.vmax_ctrl,
+                        vmax_ratio=args.vmax_ratio,
+                        ratio_cbar_ticks=args.ratio_cbar_ticks,
+                        cbar_decimals=args.cbar_decimals,
+                        gl_labels=args.gl_labels,
+                        figsize=tuple(args.figsize) if args.figsize else None,
+                        hspace=args.hspace, wspace=args.wspace)
+
+    name = args.out_name or (FIG_NAME if args.panels == 'abcdef'
+                             else f'{FIG_NAME}_{args.panels}')
+    os.makedirs(OUT_DIR, exist_ok=True)
+    for ext in ('png', 'pdf'):
+        # Opaque white, not transparent=True -- see fig5_misfit_rmse_skill's
+        # __main__ for why (alpha=0 pinholes along the coastlines render as
+        # black blobs on any dark ground).
+        fig.savefig(os.path.join(OUT_DIR, f'{name}.{ext}'), dpi=300,
+                    bbox_inches='tight', facecolor='white', edgecolor='none')
+    print(f'wrote {name}.{{png,pdf}} to {OUT_DIR}')
