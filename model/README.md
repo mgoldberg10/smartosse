@@ -155,9 +155,21 @@ base+delta pattern where more than one variant exists:
   (same `data.ctrl_dailyxx_multgen`/spread-prior pattern as `jraspread`) and `data.ecco`
   (`gencost_datafile(1)` = `..._{spacing}_{157,106,71}sensors_fullnatl`, sensor counts from
   `STDOUT.0000`, matching `STATUS.md`'s own `210km_71sensors_fullnatl` naming).
-- **`partialcables_jrastd_daytoday/fullnatl/`**, **`gracellc4320_sc_spread/fullnatl/`**,
-  **`gracellc4320_spread/fullnatl/`** — each a single region, namelists intact, straight copies
-  (51–52 files each), no reconstruction or base/delta split needed.
+- **`partialcables_jrastd_daytoday/`** (fig9/`gen_appendixB_skill_cache`'s `REGIONS = ['labsea',
+  'subgyre', 'northsea', 'newfoundland']`) — **correction, same session**: first pass wrongly
+  pulled a bare `fullnatl/` directory that turned out to be a different, much smaller (1
+  iteration vs. 21), unrelated run — this run family exists on pfe in *two* directory layouts,
+  a bare one (`.../jrastd_daytoday/fullnatl/`) and the real one under `201201/` that the code
+  actually reads (`.../jrastd_daytoday/201201/<region>/`), and the first pass didn't check for
+  the second. The real one **was also hit by `cleanup.bash`**, on all 4 regions — reconstructed
+  the same way as `jraspread`/`jraspread_spacing` (base reused from `jraspread/subgyre`, per-region
+  `data.ctrl` from the surviving `data.ctrl_dailyxx_multgen_jrastd_daytoday` variant — the
+  day-to-day-std prior, `wApressure_jra2012_daytoday_std_Pa.bin`, confirmed active in all 4 via
+  `STDOUT.0000` — and `data.ecco` reconstructed from the same template, sensor counts
+  64/25/41/27 for labsea/subgyre/northsea/newfoundland from `STDOUT.0000`).
+- **`gracellc4320_sc_spread/fullnatl/`**, **`gracellc4320_spread/fullnatl/`** — each genuinely a
+  single region (no second layout to miss), namelists intact, straight copies (51–52 files each),
+  no reconstruction or base/delta split needed.
 
 `model/namelists/` is 2.0 MB total across all 7 run families.
 

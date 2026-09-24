@@ -78,7 +78,7 @@
  &PARM03
  pickupStrictlyMatch=.FALSE.,
 # nIter0=7,
- nIter0=508320,
+ nIter0=1.,
 #366 days at 600s:
 # nTimeSteps=52704,
 # 2002.01.01 to 2017.12.31 + 1 day: 366*4+365*12=5844days*24*3600/1200 + 1ts
@@ -93,7 +93,7 @@
 # nTimeSteps=946657,
 # 2002.01.01 to 2020.12.31 + 1 day: 366*5+365*14=6940days*24*3600=599616000/600 + 1ts
 # nTimeSteps=999361,
- nTimeSteps=2160,
+ nTimeSteps=2232,
 #until end of April, for testing cost bp
 # nTimeSteps=8712,
 # 110 days

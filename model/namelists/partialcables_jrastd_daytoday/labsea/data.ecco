@@ -11,7 +11,7 @@
 #
   gencost_avgperiod(1)  = 'day',
   gencost_barfile(1) = 'm_bpday',
-  gencost_datafile(1) = 'SMART_bp_detide16constituents_detrend__30x1350x270_142sensors_fullnatl',
+  gencost_datafile(1) = 'SMART_bp_detide16constituents_detrend_201201_31x1350x270_64sensors_labsea',
   gencost_errfile(1) = 'bp_var_day_coarse4320_detide16constituent_std_cm',
   gencost_name(1) = 'bpv4-grace',
   gencost_outputlevel(1)=1,
