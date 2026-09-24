@@ -72,8 +72,8 @@ were force-added past it.
       done from a TACC checkout. Buckets below are otherwise unchanged from the original plan:
   - *Paper figures* — `fig1_global_cables`, `fig3_bp_std`, `fig5_misfit_rmse_skill`,
     `fig6_regions_skill_bp_uvbt`, `fig7_greenland_fwflux`, `fig9_*`, `fig10_patm_mechanism`,
-    `figB_patm_std_4panel`, `sensor_spacing_skill_diff`, `smart_grace_mo_skill`,
-    `fig_ib_ctrl_freqs`, `si_*`, `advfw_skill_maps`, plus the `gen_*` cache builders. **Track these.**
+    `figB_patm_std_4panel`, `figD1_sensor_spacing_skill_diff`, `fig8_smart_grace_mo_skill`,
+    `fig11_ib_ctrl_freqs`, `si_*`, `advfw_skill_maps`, plus the `gen_*` cache builders. **Track these.**
   - *Exploratory / superseded* — the `davis_*` family (13 files), `gates_*`, `nares_*`,
     `gate_sign_probe`, `debug_panel_c`, `fig7_panel_a_*`, `fig7_skeleton`,
     `davis_strait_repro_old_pipeline`. Decide: a clearly-labeled `figures/exploratory/`
