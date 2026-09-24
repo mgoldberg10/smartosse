@@ -70,9 +70,12 @@ def grep_ctrl(path, field='file'):
     return grepstr.decode().split(',')[:-1]
 
 def get_basin(
-    basin_dir='/work/08381/goldberg/ls6/aste_270x450x180/run_template/input_basin/',
+    basin_dir=None,
     basin_fname='basin_masks_eccollc_90x50_llc270A.bin',
     ):
+    if basin_dir is None:
+        from .paths import basin_dir as _basin_dir
+        basin_dir = _basin_dir()
     return read_aste_bin(basin_dir + basin_fname)
 
 

@@ -14,10 +14,13 @@ class NatureRun:
     """Handles loading and resampling of the NR dataset."""
     
     def __init__(self,
-            nr_dir = '/work/08381/goldberg/ls6/aste_270x450x180/run_template/input_ecco/smart_phibot/phibot_daily/',
+            nr_dir = None,
             fld_type='bp',
             fld_fname = None,
             ):
+        if nr_dir is None:
+            from .paths import nr_dir as _nr_dir
+            nr_dir = _nr_dir()
         self.nr_dir = nr_dir
         self.fld_type = fld_type
         self.fld_fname = fld_fname
@@ -80,13 +83,16 @@ class ForecastModel:
 
     def __init__(self,
                 run_dir,
-                grid_dir='/work/08381/goldberg/ls6/aste_270x450x180/GRID_noblank_real4/',
+                grid_dir=None,
                 iternums=[0],
                 datetimes=None,
                 ecco_frequency='day',
                 fld_type='bp',
                 fm_fld_fname=None,
             ):
+        if grid_dir is None:
+            from .paths import grid_dir as _grid_dir
+            grid_dir = _grid_dir()
 
         self.run_dir = run_dir
         self.grid_dir = grid_dir

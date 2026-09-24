@@ -48,22 +48,21 @@ def open_astedataset(data_dir=None,
                 'geometry': 'llc',
                 'default_dtype': np.float32
             }
-    default_grid_dir = '/work/08381/goldberg/ls6/aste_270x450x180/GRID_noblank_real4/'
 
-    
     # Merge default kwargs with the user-supplied kwargs (if any)
     open_mdsdataset_kwargs = {**default_openmdsdataset_kwargs, **open_mdsdataset_kwargs}
-    
+
     # Add extra metadata specific to 'aste' domain and nx size
     open_mdsdataset_kwargs['extra_metadata'] = get_extra_metadata(domain='aste', nx=nx)
     open_mdsdataset_kwargs['nx'] = nx  # Include the nx value in the kwargs
-    
+
     if 'prefix' in open_mdsdataset_kwargs.keys() and open_mdsdataset_kwargs['iters'] is None:
         open_mdsdataset_kwargs.pop('iters')
 
     if data_dir is None:
-        print('data_dir not provided. Loading default grid dataset')
-        data_dir = default_grid_dir
+        from .paths import grid_dir as _grid_dir
+        data_dir = _grid_dir()
+        print(f'data_dir not provided. Loading default grid dataset: {data_dir}')
     
     ds = open_mdsdataset(data_dir, **open_mdsdataset_kwargs)
     

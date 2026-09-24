@@ -27,6 +27,7 @@ dependencies = [
     "xarray",
     "xmitgcm",
     "tabulate",
+    "pyyaml",
 ]
 
 [project.optional-dependencies]

@@ -196,15 +196,39 @@ Worth doing, and it is the natural home for Tier 0.
 **Verified:** 6 hardcoded `/work/08381/goldberg/...` paths in the core modules and **161** in
 `smartosse/figures/`. These are baked into function *defaults* (`osse.py:20`, `osse.py:86`,
 `dataset.py:51`, `utils.py:73`), so the package literally cannot be imported-and-used off TACC.
+**Update, 2026-09-24: the 4 core-module ones are fixed** — see the resolver below. The 161 in
+`smartosse/figures/` remain (out of scope for this pass).
 
-- [ ] Add `smartosse/paths.py`: a small resolver with env-var overrides
-      (`SMARTOSSE_DATA_ROOT`, `SMARTOSSE_GRID_DIR`, `SMARTOSSE_NR_DIR`, `SMARTOSSE_CACHE_DIR`)
-      falling back to a `config.yml`, falling back to the shipped cache directory.
-- [ ] Sweep the core modules first (6 sites, an afternoon). The 161 figure-script sites can go
-      gradually, or mostly resolve themselves once they read from `SMARTOSSE_CACHE_DIR`.
-- [ ] Make the error message good: if a path is unset and the data is absent, say *which tier*
-      the user is attempting and what they would need. That error message is a documentation
-      surface.
+- [x] ~~Add `smartosse/paths.py`~~ done: `resolve(key)` checks `SMARTOSSE_<KEY>` env vars first,
+      then the active site's entry in `config/sites.yml` (site auto-detected by hostname, or
+      forced via `SMARTOSSE_SITE`), raising `PathNotConfiguredError` if neither supplies it —
+      except `cache_dir()`, which falls back to the shipped `smartosse/figures/data/` instead of
+      raising, since that's what makes Tier 0 work with zero configuration. `config/sites.yml`
+      has real, non-placeholder entries for `pfe` (this session's own hostname/paths) and `tacc`
+      (the exact values these 4 functions used to hardcode, so behavior on TACC is unchanged —
+      verified with `SMARTOSSE_SITE=tacc`), plus a `docker` site with deliberately no `run_root`
+      and a commented `local` template for contributors, per the design sketched here.
+- [x] ~~Sweep the core modules first (6 sites)~~ — found and fixed 4 live ones (not 6; the other
+      two `grep` hits were a docstring example and dead commented-out code, not real defaults):
+      `dataset.py`'s `open_astedataset` (`default_grid_dir`), `osse.py`'s `NatureRun.__init__`
+      (`nr_dir`) and `ForecastModel.__init__` (`grid_dir`), `utils.py`'s `get_basin`
+      (`basin_dir`). Each now defaults to `None` and resolves lazily via `paths.py` only when the
+      caller doesn't pass an explicit value, so existing explicit-arg call sites are untouched.
+      **Found and fixed a real, unrelated bug along the way**: `smartosse/__init__.py`'s lazy
+      `__getattr__` treated `from smartosse import paths` as an attribute search across
+      `_SUBMODULES`, so it imported `cmaps` (and would have gone on to `osse`, `plot`) just to
+      check each for a `paths` attribute — crashing on `cmocean` before ever reaching `paths`
+      itself on a machine without the plotting stack. New `_DIRECT_SUBMODULES` tuple resolves a
+      bare submodule name to the module itself first, so a light new submodule can never be
+      dragged through a heavy one just because of search order.
+      161 figure-script sites: not swept (out of scope for this pass — see §5c/§6).
+- [x] ~~Make the error message good~~ done — see `PathNotConfiguredError`'s message, which names
+      the missing key, the detected site (or that none matched), both fixes (env var or
+      `sites.yml` edit), and points at `config/sites.yml` + this section.
+- [x] `tests/test_paths.py` (7 cases: env-var precedence, `SMARTOSSE_SITE` override, hostname
+      detection, missing-key error content, a site with no `run_root` not raising just from being
+      detected, an unrecognized site, `cache_dir()`'s fallback) — the kind of cheap, fixture-based
+      coverage §2 already asked for on pure functions like this. `pytest tests/` now 9 passed.
 
 ---
 

@@ -19,4 +19,5 @@ dependencies:
   - cmocean
   - pyresample
   - tabulate
+  - pyyaml
   - ecco_v4_py
