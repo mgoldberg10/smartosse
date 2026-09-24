@@ -11,16 +11,47 @@ checkout 285cda8c7` reproduces the source exactly.
 
 ## `jobs/`
 
-The 16 PBS job-submission scripts (`script_*.bash`) that actually launch the paper's OSSE runs,
-copied verbatim from `osses/`, plus `run_logic.sh` (a shared hang-detection wrapper around
-`mpiexec` that every script sources — watches for a stall on the `dyG` log line and kills/restarts).
-Naming matches the `runc68v_froman_*` / experiment names used throughout `STATUS.md` (partial
-cables, `jra_std` variant, subgyre, daily, year2012, spacing sweep, inverted-barometer, etc.).
+The PBS job-submission scripts (`script_*.bash`) that launch the runs the *currently tracked*
+figure/cache code actually reads, plus `run_logic.sh` (a shared hang-detection wrapper around
+`mpiexec` that every script sources — watches for a stall on the `dyG` log line and
+kills/restarts).
 
-Representative resource request (`script_partialcables.bash`): `#PBS -l
+**Curated down from the 16 scripts originally rescued from pfe**, 2026-09-24: grepped every
+tracked `smartosse/figures/*.py` and `gen_*.py` for the `runc68v_*` run-directory strings they
+actually open, then kept only the scripts whose `rundir=` line — active *or* commented out —
+produces one of those names. Several of these scripts are hand-edited, re-submitted templates
+(multiple `rundir=` lines, only one uncommented at a time), so a script whose *current* active
+line isn't referenced can still be the right generator for a referenced run under an earlier
+edit — that's why some entries below list a run the script doesn't currently produce.
+
+| script | referenced run(s) it can produce | currently active `rundir` |
+|---|---|---|
+| `script_ib.bash` | `..._ib_freq2` | same (active) |
+| `script_partialcables_jra_std.bash` | `..._partialcables_jraspread` (commented), `..._partialcables_jrastd_daytoday` | `..._jrastd_daytoday` |
+| `script_spacing.bash` | `..._partialcables_jraspread` (commented), `..._partialcables_jraspread_spacing` | `..._jraspread_spacing` |
+| `script_year2012.bash` | `..._gracellc4320_sc_spread` | same (active) |
+| `script_year2012_grace.bash` | `..._gracellc4320_spread` (commented) | `..._gracellc4320_stdold` |
+| `script_year2012_stamp3.bash` | `..._noapress` (commented) | `..._gracellc4320_sc_may2026` |
+
+10 scripts removed as not generating anything the current figure set reads: `script_daily.bash`,
+`script_daily_coldstarttrue.bash`, `script_ib_apr52025.bash` (superseded by `script_ib.bash`),
+`script_partialcables.bash` (bare `_partialcables`, confusingly similar name to
+`script_partialcables_jra_std.bash` but a different, unreferenced run — only 4 of 5 regions,
+missing `fullnatl`), `script_partialcables_jra_std_nopatm.bash`, `script_subgyre.bash`,
+`script_subgyre_2mo.bash`, `script_test_ctrl_gen_rec.bash`, `script_uv0.bash`,
+`script_uvwind.bash`. Still recoverable from pfe (`git log` this commit, or the pfe source tree
+directly) if a reason to want them back turns up.
+
+One reference not resolved either way: `fig8_smart_grace_mo_skill.py` also reads
+`..._gracellc4320_sc/2012/` (older `2012/` not `201201/` naming) — no script in the original 16
+produces that exact name, active or commented. Per `STATUS.md`, that run's `m_bpday` data is
+already purged (only `.meta` survives), so it's moot for regenerating it either way, but the
+generating script (if it still exists anywhere) hasn't been found.
+
+Representative resource request (`script_partialcables_jra_std.bash`): `#PBS -l
 select=15:ncpus=40:model=sky_ele`, `walltime=10:00:00`, `nprocs=580`, tile decomposition
-`snx=18 sny=18` (the `18x18x580` `data.exch2` variant). Not yet confirmed whether every script
-in this directory uses the same tile decomposition — check each before assuming.
+`snx=18 sny=18` (the `18x18x580` `data.exch2` variant). Not yet confirmed whether every
+remaining script uses the same tile decomposition — check each before assuming.
 
 ## `optim/`
 

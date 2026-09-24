@@ -124,8 +124,11 @@ do not `git add` this wholesale).
       `walltime=10:00:00`, `nprocs=580`, `snx=18 sny=18` (tile decomposition — matches the
       `18x18x580` `data.exch2` variant ROADMAP §5b already flagged as needing identification).
       All 16 source a shared `run_logic.sh` (hang-detection wrapper around `mpiexec` — checks
-      for a stall on `dyG` and kills/restarts). **Copied**, this session — see `model/jobs/`
-      and `model/README.md`.
+      for a stall on `dyG` and kills/restarts). **Copied, then curated down to 6** — once the
+      `d764631` figure-script merge landed, cross-referenced every `rundir=` line (active and
+      commented) against the run directories the tracked figure code actually opens; 10 of the
+      16 didn't produce anything referenced and were dropped. See `model/jobs/` and
+      `model/README.md` for the full mapping and what got cut.
 - [ ] Nature-run extraction pipeline — **deprioritized, manual intervention needed** (per
       Matt, 2026-09-24). Not inventoried.
 - [ ] llc4320 handling — **deprioritized, manual intervention needed** (same). Not inventoried.
