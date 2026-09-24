@@ -1,0 +1,122 @@
+# SEAICE parameters
+ &SEAICE_PARM01
+
+## CAB para for ADJ
+#     SINegFac = 1.0 
+#     SEAICEuseFREEDRIFT = .FALSE.,
+      SEAICEpresH0=2.,
+      SEAICEpresPow0=1,
+      SEAICEpresPow1=2.0,
+      SEAICE_dryIceAlb   = 0.7,
+#veryhigh: arctic18km optimized values from Nguyen et al., 2011
+#vhi albedos, 18km optimized Arctic, no mdimSnow, for jra25 and jra55
+#      SEAICE_wetIceAlb   = 0.7060,
+#      SEAICE_drySnowAlb  = 0.8652,
+#      SEAICE_wetSnowAlb  = 0.8085,
+#hi albedos, upper range of what community used
+      SEAICE_wetIceAlb   = 0.68,
+      SEAICE_drySnowAlb  = 0.84,
+      SEAICE_wetSnowAlb  = 0.77,
+#
+      SEAICE_strength    = 2.2640e+04,
+#before c67c+      SEAICE_waterDrag   = 5.5627,
+#the new SEAICE_waterDrag = old SEAICE_water / rhoConst
+      SEAICE_waterDrag   = 0.005406,
+#atn: use these for uvstr
+#      OCEAN_drag         = 0.001,
+#      SEAICE_drag        = 0.001,
+##these give CDAIR=SEAICE_drag/OCEAN_drag=1
+##atn: use these for uvstr, these are my values , email to Ian dated 26/Nov/2013
+##these give CDAIR=SEAICE_drag/OCEAN_drag=0.577
+##note that for stress, the only that that matters is the ratio, not individual values
+#      OCEAN_drag         = 0.000815,
+#      SEAICE_drag        = 0.00047,
+##try to slow down ice even further: CDAIR=SEAICE_drag/OCEAN_drag=0.3
+#      OCEAN_drag         = 0.0015,
+#      SEAICE_drag        = 0.0005,
+####      SEAICE_drag        = 0.00047,
+#atn: use this for uvwind:
+      SEAICE_drag        = 0.00114,
+      HO                 = 0.6074,
+#      LSR_ERROR          = 2.e-4,
+#      LSR_ERROR          = 1.e-4,
+#      LSR_ERROR          = 1.e-6,
+      LSR_ERROR          = 1.e-5,
+#if want to update the nonLinIterMax to recommended 10 , must recompile
+#and increase MPSEUDOTIMESTEPS in SEAICE_PARAMS.h to be the exact value
+      SEAICEnonLInIterMax=2,
+      SEAICEuseDYNAMICS  = .TRUE.,
+
+#default min_ATEMP and min_TICE are -50.0
+      MIN_ATEMP          = -40.,
+      MIN_TICE           = -40.,
+      SEAICEadvSnow      = .TRUE.,
+#advSalt must be off when not using SEAICE_VARIABLE_SALINITY
+####      SEAICEadvSalt      = .TRUE.,
+#adv[heff,area] are true by default
+#      SEAICEadvHeff      = .TRUE.,
+#      SEAICEadvArea      = .TRUE.,
+      SEAICEuseFlooding  = .TRUE.,
+
+      SEAICEadvScheme    = 33,
+#      SEAICEadvScheme    = 77,
+      SEAICE_multDim = 7,
+      SEAICE_useMultDimSnow = .FALSE.,
+
+#ian new begin
+      SEAICE_area_reg = 0.15,
+      SEAICE_area_floor = 0.00001,
+      SEAICE_hice_reg = 0.1,
+      IMAX_TICE = 6,
+      SEAICE_EPS = 1.E-8,
+      SEAICE_area_max = 0.998,
+#ian new end
+
+#ph new begin
+      SEAICE_salt0 = 4.0,
+      SEAICE_doOpenWaterGrowth = .TRUE.,
+      SEAICE_doOpenWaterMelt = .TRUE.,
+      SEAICE_areaLossFormula = 1,
+# 10 m / 1200 sec
+#      SEAICE_mcPheePiston = 0.0083,
+      SEAICE_mcPheePiston = 0.0001,
+#ph new end
+
+      SEAICEuseMetricTerms = .TRUE.,
+      SEAICE_no_slip     = .FALSE.,
+     AreaFile            = 'AREAaste_Jan2002_270x1350.bin',
+      HsnowFile          = 'HSNOWaste_Jan2002_270x1350.bin',
+      HeffFile           = 'HEFFaste_Jan2002_270x1350.bin',
+##other parameters to be consistent with pre jun2018:
+##need to address starting c67c+
+#this next flag SEAICEscaleSurfStress can yield [u,v]ice of 1e2 if true!
+#      SEAICEscaleSurfStress = .FALSE.,
+#      SEAICEetaZmethod = 0,
+#      SEAICE_OLx=0,
+#      SEAICE_OLy=0,
+#      SEAICEaddSnowMass = .FALSE.,
+##this next flag updateoceanstress should be used if 
+##use (SEAICEuseDynamics or SEAICEuseFREEDRIFT) and momStepping
+#The flag below MUST ALWAYS BE SET TO TRUE, else we get incorrect physics.
+######      SEAICEupdateOceanStress=.FALSE.,
+#the momadv flag has to go with SEAICE_ALLOW_MOM_ADVECTION currently undef
+#      SEAICE_momAdvection = .FALSE.,
+#Now see what the sea ice looks like with improved default:
+##need to address starting c67c+
+      SEAICEscaleSurfStress = .TRUE.,
+      SEAICEetaZmethod = 3,
+      SEAICE_OLx=2,
+      SEAICE_OLy=2,
+      SEAICEaddSnowMass = .TRUE.,
+##this next flag updateoceanstress should be used if 
+##use (SEAICEuseDynamics or SEAICEuseFREEDRIFT) and momStepping
+      SEAICEupdateOceanStress=.TRUE.,
+ /
+#
+ &SEAICE_PARM02
+      SEAICE_cutoff_area = 0.1499,
+      SEAICE_cutoff_heff = 0.,
+ /
+ &SEAICE_PARM03
+ /
+

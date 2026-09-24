@@ -1,0 +1,19 @@
+# Packages
+ &PACKAGES
+ useOBCS        = .TRUE.,
+ useEXF         = .TRUE.,
+ useCAL         = .TRUE.,
+ useGMREDI      = .TRUE.,
+ useSEAICE      = .TRUE.,
+ useKPP         = .TRUE.,
+ useSALT_PLUME  = .TRUE.,
+ useDiagnostics = .TRUE.,
+ useECCO        = .TRUE.,
+ useCTRL        = .TRUE.,
+ useProfiles    = .FALSE.,
+ useAUTODIFF    = .TRUE.,
+ useSMOOTH      = .TRUE.,
+ useLAYERS      = .false.,
+#
+ useGrdchk=.FALSE.,
+ /

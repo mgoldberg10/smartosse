@@ -1,0 +1,24 @@
+# ******************
+# ECCO cost function
+# ******************
+ &ECCO_COST_NML
+#
+ &
+# ***************************
+# # ECCO generic cost functions
+# # ***************************
+ &ECCO_GENCOST_NML
+#
+  gencost_avgperiod(1)  = 'day',
+  gencost_barfile(1) = 'm_bpday',
+  gencost_datafile(1) = 'SMART_bp_2012_370x1350x270_daily',
+  gencost_errfile(1) = 'bp_var_day_coarse4320_detide16constituent_std_cm',
+  gencost_name(1) = 'bpv4-grace',
+  gencost_outputlevel(1)=1,
+  gencost_posproc(1,1)='smooth',
+  gencost_posproc_r(1,1)=300000,
+  gencost_posproc_i(1,1)=5000,
+  mult_gencost(1) = 1.E14,
+#
+ &
+#

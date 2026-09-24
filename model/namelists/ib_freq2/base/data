@@ -1,0 +1,152 @@
+# ====================
+# | Model parameters |
+# ====================
+#
+# Continuous equation parameters
+ &PARM01
+ tRef               = 3*23.,3*22.,21.,2*20.,19.,2*18.,17.,2*16.,15.,14.,13.,
+                      12.,11.,2*9.,8.,7.,2*6.,2*5.,3*4.,3*3.,4*2.,12*1.,
+ sRef               = 50*34.5,
+ no_slip_sides  = .TRUE.,
+ no_slip_bottom = .TRUE.,
+#
+ viscAr=5.e-4,
+ viscAhGrid = 0.E-4,
+ viscA4Grid = 0.E0,
+#
+ diffKhT=0.E0,
+ diffKhS=0.E0,
+ diffK4T=0.E10,
+ diffK4S=0.E10,
+ bottomDragQuadratic = 0.002,
+ implicitDiffusion=.TRUE.,
+ implicitViscosity=.TRUE.,
+ viscC4Leith=1.5,
+ viscC4Leithd=1.5,
+ viscA4GridMax=0.5,
+ useAreaViscLength=.TRUE.,
+ gravity=9.81,
+ rhonil=1029.,
+ rhoConst=1029.,
+ rhoConstFresh=1000.,
+ eosType='JMD95Z',
+ implicitFreeSurface=.TRUE.,
+ exactConserv=.TRUE.,
+ useSingleCpuIO=.TRUE.,
+#
+## if use nlfs and rfwf, can also use adv 7
+## if use adv7 (and seaice adv 77), need to compile
+## code_adv7_bypass_tamc_c67 and set overlap ol[x,y]=8 in SIZE.h
+# tempAdvScheme=7,
+# saltAdvScheme=7,
+#
+## if use adv30, only need overlap ol[x,y]=4
+ tempAdvScheme=30,
+ saltAdvScheme=30,
+#
+ staggerTimeStep=.TRUE.,
+ vectorInvariantMomentum=.TRUE.,
+ useJamartWetPoints=.TRUE.,
+#
+## set to eccov4, make sure minbathy=20m first
+ hFacMin=.2,
+ hFacMinDr=5.,
+#
+## if use nlfs and rfwf, need deltaT=600s
+# select_rStar=2,
+ nonlinFreeSurf=0,
+ useRealFreshWaterFlux=.FALSE.,
+#
+## if use lfs and .not.rfwf, deltaT=1200s
+# nonlinFreeSurf=0,
+# useRealFreshWaterFlux=.FALSE.,
+ linFSconserveTr=.FALSE.,
+#
+ allowFreezing=.FALSE.,
+ readBinaryPrec=64,
+ writeBinaryPrec=32,
+ debugLevel=1,
+ /
+
+# Elliptic solver parameters
+ &PARM02
+ cg2dMaxIters=200,
+ cg2dTargetResWunit=1.E-8,
+ /
+
+# Time stepping parameters
+ &PARM03
+ pickupStrictlyMatch=.FALSE.,
+# nIter0=7,
+ nIter0=1.,
+#366 days at 600s:
+# nTimeSteps=52704,
+# 2002.01.01 to 2017.12.31 + 1 day: 366*4+365*12=5844days*24*3600/1200 + 1ts
+# nTimeSteps=420769,
+# 2002.01.01 to 2017.12.31 + 1 day: 366*4+365*12=5844days*24*3600/600 + 1ts
+# nTimeSteps=841537,
+# 2002.01.01 to 2019.12.31 + 1 day: 366*4+365*14=6574days*24*3600/1200 + 1ts
+# nTimeSteps=473329,
+# 2002.01.01 to 2019.12.31 + 1 day: 366*4+365*14=6574days*24*3600=567993600/450 + 1ts
+# nTimeSteps=1262208,
+# 2002.01.01 to 2019.12.31 + 1 day: 366*4+365*14=6574days*24*3600=567993600/600 + 1ts
+# nTimeSteps=946657,
+# 2002.01.01 to 2020.12.31 + 1 day: 366*5+365*14=6940days*24*3600=599616000/600 + 1ts
+# nTimeSteps=999361,
+ nTimeSteps=504,
+#until end of April, for testing cost bp
+# nTimeSteps=8712,
+# 110 days
+# nTimeSteps=7920,
+# 92 days
+# nTimeSteps=13248,
+# nTimeSteps=6624,
+# 62 days
+# nTimeSteps=8928,
+# nTimeSteps=4464,
+# deltaT = 1200.,
+ deltaT=1200.,
+# deltaT = 450.,
+ abEps = 0.1,
+ forcing_In_AB=.FALSE.,
+ momDissip_In_AB=.FALSE.,
+# pChkptFreq  =31536000.0,
+ pChkptFreq  =2635200.0,
+# monitorFreq = 1.0,
+ monitorFreq=86400.0,
+# monitorFreq = 432000.0,
+# monitorFreq  =2635200.0,
+# DumpFreq=2635200.0,
+# adjDumpFreq=86400.0,
+# adjMonitorFreq = 432000.0,
+ adjMonitorFreq = 86400.0,
+ pickupStrictlyMatch=.FALSE.,
+ /
+
+# Gridding parameters
+ &PARM04
+ usingCurvilinearGrid=.TRUE.,
+ delR = 
+    10.00, 10.00, 10.00, 10.00, 10.00, 10.00, 10.00, 10.01,
+    10.03, 10.11, 10.32, 10.80, 11.76, 13.42, 16.04, 19.82, 24.85,
+    31.10, 38.42, 46.50, 55.00, 63.50, 71.58, 78.90, 85.15, 90.18,
+    93.96, 96.58, 98.25, 99.25,100.01,101.33,104.56,111.33,122.83,
+    139.09,158.94,180.83,203.55,226.50,249.50,272.50,295.50,318.50,
+    341.50,364.50,387.50,410.50,433.50,456.50,
+ /
+
+# Input datasets
+ &PARM05
+ adTapeDir='tapes',
+ bathyFile ='bathy_fill9iU42Ef_noStLA_v1.bin',
+# bathyFile ='bathy_gebco2021_aste270_r8_v1.bin',
+ hydrogThetaFile='WOA09v2_T_llc270_JAN.bin',
+ hydrogSaltFile ='WOA09v2_S_llc270_JAN.bin',
+# hydrogThetaFile='aste_T0_09_13_2011.bin',
+# hydrogSaltFile='aste_S0_09_13_2011.bin',
+# diffKrFile  ='diffkr_i62.bin',
+ diffKrFile  ='logdiffkr_i62.bin',
+ viscAHDfile ='visc_v1up9_cap0jy460GoM600_Pac0.bin',
+ viscAHZfile ='visc_v1up9_cap0jy460GoM600_Pac0.bin',
+ /
+

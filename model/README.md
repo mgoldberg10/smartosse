@@ -135,11 +135,34 @@ chosen because `STDOUT.0000` survives cleanup and MITgcm echoes every namelist i
   template-substitution approach). Sensor counts (`142/64/27/41` sensors for
   `fullnatl/labsea/newfoundland/northsea`) came from `STDOUT.0000` directly, not assumed.
 
+### The other 6 run families
+
+All confirmed intact on pfe (no `cleanup.bash` damage) except one — pulled straight, same
+base+delta pattern where more than one variant exists:
+
+- **`ib_freq2/`** — the inverted-barometer control-frequency sweep (fig11), `base/` (everything
+  shared) + one dir per frequency (`24hr/` … `96hr/`, matching fig11's `HOURS = (24, 36, 48, 60,
+  72, 84, 96)` — `240hr` and `BAD120hrBAD` exist on pfe but aren't read by any tracked figure, so
+  weren't pulled) holding just `data.ctrl`, whose only per-frequency difference is
+  `xx_gentim2d_period(8)` (the sweep's actual independent variable, in seconds:
+  `86400/129600/172800/216000/259200/302400/345600`). Verified `data.ecco` and everything else
+  are byte-identical (single md5sum) across all 8 frequency dirs before trusting this split.
+- **`partialcables_jraspread_spacing/`** (figD1) — **also hit by `cleanup.bash`**, same
+  reconstruction as `partialcables_jraspread` above (no surviving region here at all, so `base/`
+  reuses `partialcables_jraspread/subgyre`'s surviving set — verified via `STDOUT.0000`'s
+  `PACKAGES`/`PARM01` echo that the shared domain config really is identical, since nothing here
+  survived to diff directly). `70km/`, `140km/`, `210km/` each hold a reconstructed `data.ctrl`
+  (same `data.ctrl_dailyxx_multgen`/spread-prior pattern as `jraspread`) and `data.ecco`
+  (`gencost_datafile(1)` = `..._{spacing}_{157,106,71}sensors_fullnatl`, sensor counts from
+  `STDOUT.0000`, matching `STATUS.md`'s own `210km_71sensors_fullnatl` naming).
+- **`partialcables_jrastd_daytoday/fullnatl/`**, **`gracellc4320_sc_spread/fullnatl/`**,
+  **`gracellc4320_spread/fullnatl/`** — each a single region, namelists intact, straight copies
+  (51–52 files each), no reconstruction or base/delta split needed.
+
+`model/namelists/` is 2.0 MB total across all 7 run families.
+
 ## Still needed (not done yet)
 
-- Namelists for the other 6 referenced run families (`ib_freq2`, `partialcables_jraspread_spacing`,
-  `partialcables_jrastd_daytoday`, the two `gracellc4320_{sc_spread,spread}` runs) — confirmed
-  intact on pfe, not yet pulled into git.
 - The build recipe is only partially captured: compiler (`ifort 19.1.3.304`) and MPI (HPE MPT
   2.30) versions are known from `genmake.log`, but the optfile name itself hasn't been pinned
   down yet.
