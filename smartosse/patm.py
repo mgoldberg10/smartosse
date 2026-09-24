@@ -3,6 +3,7 @@ import xarray as xr
 import pandas as pd
 import re
 from pathlib import Path
+import matplotlib.pyplot as plt
 from .utils import read_float32
 
 def plot_jra_vs_aste_cable_variability(
