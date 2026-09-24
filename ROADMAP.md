@@ -1,0 +1,422 @@
+# smartosse — repo cleanup roadmap
+
+Working checklist for turning this from "the code that made the paper figures" into a
+public artifact that stands up to two different audiences at once:
+
+- **Scientific readers / reviewers.** The paper's data availability statement already
+  names `github.com/mgoldberg10/smartosse` by URL. This repo is a *cited artifact of the
+  manuscript*. It needs to be honest about what it can and cannot reproduce.
+- **Technical interviewers.** They will not have ASTE, will not download a nature run, and
+  will spend about four minutes. They judge structure, tests, CI, docs, and whether the
+  README makes them go "huh, neat."
+
+These two goals conflict less than they appear. The thing that satisfies both is the same:
+**make the reproducibility boundary explicit and make the innermost tier actually run.**
+
+---
+
+## 0. The framing decision (do this first — everything else follows from it)
+
+The honest problem: full reproduction needs ASTE + its inputs, the run directories, and a
+nature run that is increasingly hard to source. That is not fixable and should not be
+pretended away.
+
+The fix is to stop treating "reproducible" as binary and publish **tiers**. Good news —
+the code is *already* built this way, it just isn't named or documented as such. There is a
+latent two-stage architecture in `smartosse/figures/`: `gen_*.py` / `build_cache()`
+functions read run output and write small `.nc` caches into `figures/data/`, and `make_fig()`
+functions render purely from those caches.
+
+Proposed tiers, to be stated up front in the README:
+
+| Tier | What you can do | What you need | Status today |
+|---|---|---|---|
+| **0** | Regenerate **every paper figure** from shipped caches | `docker run`, ~200 MB download | Latent in the code; needs a driver + published caches |
+| **1** | Regenerate the caches from run output | The optimization run directories (TACC/`/work`) | Works, paths hardcoded |
+| **2** | Regenerate run output | ASTE build + adjoint + nature run + JRA-55 | Inputs located and tiny (§5b) — needs rescuing off `/scratch` |
+
+Tier 0 is the whole game. It is what an interviewer clicks, and it is what a reviewer
+needs to check a number. It is genuinely achievable because `figures/data/` is only 180 MB
+and several of those files are superseded variants that can be dropped.
+
+> Naming the tiers is itself the flex. "I know exactly which layer of my pipeline is
+> reproducible by a stranger and I built a Docker image for that layer" reads far better
+> than a repo that quietly implies everything runs.
+
+- [ ] Decide on the tier framing (or a variant of it) — every task below assumes it
+- [ ] **Tag the current commit `v1.0-paper-submitted` before touching anything.** The
+      manuscript is in review. Freeze the exact tree that produced the submitted figures so
+      no amount of refactoring can cost you the ability to answer a reviewer.
+
+---
+
+## 1. Repo hygiene — what is actually in the repo
+
+**Verified state:** 66 `.py` files on disk, **23 files tracked by git**. The gap is not an
+oversight — `smartosse/.gitignore` line `**/figures/*` ignores the entire figures
+directory, plus `**/*.png`, `**/*.nc`, `**/*.pdf`. The handful of tracked figure modules
+were force-added past it.
+
+- [ ] Fix `smartosse/.gitignore`. It is a MATLAB-era file (`*.m~`, `*.asv`, `cable_utils/mylog.txt`)
+      that is now actively fighting the repo. The root `.gitignore` already handles
+      `figures/output/` and `figures/data/` correctly — `smartosse/.gitignore` can probably
+      be deleted outright.
+- [ ] **Triage `smartosse/figures/` (66 scripts).** Three buckets:
+  - *Paper figures* — `fig1_global_cables`, `fig3_bp_std`, `fig5_misfit_rmse_skill`,
+    `fig6_regions_skill_bp_uvbt`, `fig7_greenland_fwflux`, `fig9_*`, `fig10_patm_mechanism`,
+    `figB_patm_std_4panel`, `sensor_spacing_skill_diff`, `smart_grace_mo_skill`,
+    `fig_ib_ctrl_freqs`, `si_*`, `advfw_skill_maps`, plus the `gen_*` cache builders. **Track these.**
+  - *Exploratory / superseded* — the `davis_*` family (13 files), `gates_*`, `nares_*`,
+    `gate_sign_probe`, `debug_panel_c`, `fig7_panel_a_*`, `fig7_skeleton`,
+    `davis_strait_repro_old_pipeline`. Decide: a clearly-labeled `figures/exploratory/`
+    subdir, or cut. Leaning **keep in a subdir with a one-line README** — showing the
+    exploration is not a weakness, showing it *undifferentiated from the final figures* is.
+  - *Delete outright* — `.fig7_skeleton.py.swp` (a stray vim swapfile, currently tracked-adjacent),
+    `fig9_patm_unc.py.pre_2x2_redesign` (**currently tracked** — git is the backup, this
+    file is the anti-pattern an interviewer will notice).
+- [ ] Untracked core modules: `curl.py` (48 lines), `plot_new.py` (581), `slope_cable.py` (329),
+      `wind_bp_fw.py` (526). ~1500 lines of real code invisible to git. Track or cut, but decide.
+      Note `plot.py` (23 KB) and `plot_new.py` (20 KB) coexisting is a smell — resolve or rename.
+- [ ] Move the eight stray PNGs out of the repo root (`i2_ocean*.png`, `inset_*.png`,
+      including one with parentheses and the word "current" in the filename).
+- [ ] Decide on `smartosse/tex/` (the full manuscript source, currently untracked). Options:
+      keep it out entirely until acceptance; a private sibling repo; or a `paper/` dir added
+      at acceptance. **Recommend: leave it out for now**, revisit post-review.
+- [ ] `smartosse/__init__.py` is six `from .x import *` lines. Replace with explicit
+      `__all__` / named imports — it is a 30-second fix and it is the first file anyone opens.
+- [ ] Scrub the public tree for the TACC account number (`08381`) and personal absolute paths.
+- [ ] `LICENSE` file — there is none. `setup.py` says `license=''` and `keywords='MIT License'`
+      (the license got typed into the keywords field). Pick one and add the file.
+
+---
+
+## 2. Make the tests pass and CI green
+
+**Verified:** `pytest tests/` → **1 passed, 1 failed** under the `esmpy_3.10` conda env.
+
+The failure is trivial API drift, not a real bug:
+
+```
+tests/test_bp.py:136: TypeError: BPReader.get_sensors() got an unexpected keyword argument 'bad_val'
+```
+
+`bp.py:210` is `def get_sensors(self, bad_vals=[0., -9999.])` — the parameter was pluralized
+and the test never followed. Fixing the kwarg will likely expose a second failure: the test
+asserts `"Found 33 sensors"` while the run printed `Found 5400 sensors`, because the
+deterministic fixture is being overwritten but the `bad_vals` default now also excludes
+`-9999.`. Expect to re-derive the expected arrays.
+
+- [ ] Fix `test_bp.py` (`bad_val` → `bad_vals`, re-derive the sensor assertions)
+- [ ] `bad_vals=[0., -9999.]` is a **mutable default argument** — fix while you are in there
+- [ ] The library prints debug output on every call — 14 `print()` in `bp.py`, 13 in `osse.py`.
+      Test output is a wall of `/tmp/pytest-of-goldberg/...` paths and dimension tuples.
+      Convert to `logging` with a module logger. High visual payoff for low effort.
+- [ ] There is a swallowed error printing `Error during computation: 'dim_0' not found in
+      array dimensions ('ioptim', 'time', 'sensor', 'k')` during the passing test.
+      `STATUS.md` notes this "still affects nothing" — either fix it or make the code say
+      out loud why it is benign.
+- [ ] **Broaden the test suite.** One test file for a 4000-line package is the single
+      weakest signal in the repo. Cheap, genuinely useful targets that need no model data:
+  - `utils.write_float32` / `read_float32` roundtrip (big-endian correctness is load-bearing)
+  - `utils.grep_ctrl` / `grep_cost` — parsers, ideal for fixture-based tests
+  - `dataset.get_extra_metadata_aste1080` — pure function, exact expected dict
+  - `figs_utils.latex_escape`, `style_colorbar` tick generation — pure, fast
+  - the cache merge/reuse logic (`combine_first` path) described in `STATUS.md` — that is
+    real logic with real edge cases
+  - a smoke test that every tracked figure module imports cleanly
+- [ ] Fix CI (`.github/workflows/python-tests.yml`). It pip-installs a *partial* dependency
+      set (no `cartopy`, no `ecco_v4_py`, no `matplotlib`) — so it cannot currently import
+      most of the package. Either install the full env (conda/micromamba action) or mark the
+      map-plotting tests as optional and keep CI to the pure-Python core.
+- [ ] Add a coverage badge next to the existing tests badge.
+
+---
+
+## 3. Packaging and environment
+
+**Verified bug:** `osse.py` imports `ecco_v4_py`, and `setup.py` lists it — but
+`environment.yml` does not. Anyone following the README's env gets an ImportError.
+
+- [ ] `environment.yml` says `name: base`. Rename to `smartosse`.
+- [ ] Add `ecco_v4_py` to `environment.yml`; drop `typing` from both files (stdlib since 3.5).
+- [ ] `setup.py` → `pyproject.toml`. Version is `"0.0"`; set a real one. Note `setup.py` also
+      only declares `packages=['smartosse']`, so **`smartosse.figures` is not installed** —
+      `python -m smartosse.figures.fig10_patm_mechanism` works from a source checkout but not
+      from an install. Use `find_packages()`.
+- [ ] Pin versions. `STATUS.md` records rendering workarounds specific to **matplotlib 3.4.3**
+      (`patch_pdf_indexed_image_bitdepth()`, the `transparent=True` coastline-speckle bug).
+      Those pins are load-bearing for figure fidelity — say so in a comment.
+- [ ] Ship a lockfile (`conda-lock` or `environment-lock.yml`) for the exact figure-producing env.
+
+### Docker
+
+Worth doing, and it is the natural home for Tier 0.
+
+- [ ] `Dockerfile` — micromamba base + the locked env + the package. Target: `docker run
+      ghcr.io/mgoldberg10/smartosse make figures` reproduces the paper figures into a mounted
+      volume, with zero ASTE access.
+- [ ] Publish to GHCR from CI on tag. A `docker pull` line in the README that actually works
+      is worth more than any amount of prose about reproducibility.
+- [ ] Optional second stage for Tier 1 (adds the heavier ASTE-reading deps), but do not build
+      it until Tier 0 is solid.
+
+---
+
+## 4. Paths and configuration
+
+**Verified:** 6 hardcoded `/work/08381/goldberg/...` paths in the core modules and **161** in
+`smartosse/figures/`. These are baked into function *defaults* (`osse.py:20`, `osse.py:86`,
+`dataset.py:51`, `utils.py:73`), so the package literally cannot be imported-and-used off TACC.
+
+- [ ] Add `smartosse/paths.py`: a small resolver with env-var overrides
+      (`SMARTOSSE_DATA_ROOT`, `SMARTOSSE_GRID_DIR`, `SMARTOSSE_NR_DIR`, `SMARTOSSE_CACHE_DIR`)
+      falling back to a `config.yml`, falling back to the shipped cache directory.
+- [ ] Sweep the core modules first (6 sites, an afternoon). The 161 figure-script sites can go
+      gradually, or mostly resolve themselves once they read from `SMARTOSSE_CACHE_DIR`.
+- [ ] Make the error message good: if a path is unset and the data is absent, say *which tier*
+      the user is attempting and what they would need. That error message is a documentation
+      surface.
+
+---
+
+## 5. Turn the figure pipeline into a real thing
+
+This is the highest-leverage engineering work in the repo, because the architecture already
+exists and just needs a name and a driver.
+
+- [ ] Write `figures/MANIFEST.yml` (or a Python dict): for each paper figure — figure number,
+      module, cache inputs, output filenames, which tier it needs. This doubles as the
+      reviewer's index and the README's figure gallery source.
+- [ ] A single driver: `make figures`, or `python -m smartosse.figures --all`, or a
+      `smartosse-figures` console script. It should render everything from cache and report
+      what it skipped and why.
+- [ ] Give the ~20 figure modules that lack `__main__` a consistent CLI, or explicitly mark
+      them library-only (`figures/__init__.py` already says modules are "meant to be imported
+      into a notebook, not run as a script" — but 29 of them now have `__main__` blocks, so
+      that docstring is stale either way).
+- [ ] **Publish the caches to Zenodo, get a DOI.** `figures/data/` is 180 MB and contains
+      obvious superseded variants (`smart_grace_mo_skill_stdold.nc`,
+      `..._oldgrace.nc`, `..._it4.nc` — 6.7 MB each). Trimmed, this is likely ~100 MB.
+      Add `smartosse fetch-data` to pull it. The Zenodo DOI then goes into the paper's data
+      availability statement alongside the GitHub URL — which closes the loop on the
+      reproducibility claim the manuscript already makes.
+- [ ] Audit the caches for anything not intended to be public before uploading.
+
+---
+
+## 5b. Model provenance — Tier 2 (namelists, code mods, MITgcm version)
+
+**This turned out far better than expected. Almost none of it is on pfe — it is on this
+machine, and it is tiny.** Verified:
+
+| Piece | Location | Size |
+|---|---|---|
+| MITgcm source | `/work/08381/goldberg/ls6/MITgcm_c68v` — a **git clone**, `285cda8c7`, tagged `checkpoint68v` (2024/02/03) | — |
+| Code modifications | `.../osses/<run>/code_froman/` — ~40 `.F`/`.h` files + `packages.conf`, incl. `cost_gencost_bpv4.F`, `CTRL_SIZE.h`, `ECCO_OPTIONS.h` | **354 KB** |
+| Namelists | `.../osses/<run>/data*` — 41 files (`data`, `data.cal`, `data.ctrl`, `data.ecco`, `data.exf`, `data.pkg`, `data.autodiff`, `data.diagnostics`, …) | **187 KB** |
+| Per-experiment deltas | `<run>/201201/<region>/iter####/` carries only `data.ctrl` + `data.ecco` — i.e. exactly the two namelists that vary per OSSE | ~KB |
+| Grid | `/work/.../aste_270x450x180/GRID_noblank_real4/` | larger |
+
+So the "Modifications to the forecast model configuration" that the paper's data
+availability statement already promises is **~550 KB per run** and can live in git directly.
+That is not a stretch goal, it is an afternoon.
+
+> ⚠️ **Time-sensitive.** The OSSE run directories are on `/scratch/08381/goldberg/...`.
+> TACC purges `$SCRATCH`. The provenance the manuscript cites is currently sitting on
+> purgeable storage. **Confirm LS6's current purge policy and get the namelists + code mods
+> off scratch before anything else in this section.** Copying 550 KB is cheap insurance;
+> re-deriving a lost namelist set after acceptance is not.
+
+- [ ] **Rescue first, organize later.** `rsync` the `data*` + `code_froman/` from the runs
+      that matter into the repo (or anywhere on `/work`) today.
+- [ ] Decide which runs to include. Only **7 of 67** dirs under `osses/` carry a full
+      namelist set; the rest are per-region/per-iteration children. Candidates, from the
+      figure scripts and `STATUS.md`:
+      `runc68v_froman_partialcables_jraspread/201201/{fullnatl,labsea,subgyre,newfoundland,northsea}`,
+      `runc68v_froman_partialcables_jraspread_spacing/201201/{70km,140km}`,
+      `runc68v_froman_natl_1month_alldailyxx_*` (the `noapress`, `fixbpweight`, `gracellc4320`
+      variants), and the nature-run extraction under `osses/naturerun/`.
+- [ ] Record the MITgcm version precisely: **checkpoint68v, upstream commit `285cda8c7`**.
+      Since the local tree is a git clone, anyone can `git clone MITgcm && git checkout 285cda8c7`.
+      That single line does more for Tier 2 reproducibility than any amount of prose.
+- [ ] Capture the build recipe: the optfile used, `genmake2` invocation, `SIZE.h` /
+      `data.exch2` tile decomposition (several variants present:
+      `data_exch2_{15x15x823,18x18x580,30x30x242,…}` — say which one the paper's runs used),
+      and the job submission scripts.
+- [ ] Capture the **optimization** side too — the runs are adjoint/optim
+      (`iter0000`…`iter0020`); the ECCO `optim` driver and its settings are as load-bearing
+      as the forward namelists.
+- [ ] Diff the namelist sets across experiments and commit **one base set plus per-experiment
+      deltas**, rather than 7 near-identical 187 KB copies. The per-iteration dirs already
+      demonstrate the pattern: only `data.ctrl` and `data.ecco` vary.
+- [ ] `docs/model-setup.md`: version → clone → apply `code/` → build → namelists → run →
+      what output feeds Tier 1. Be explicit that this needs HPC and is not push-button.
+- [ ] Anything genuinely only on **pfe** (nature-run extraction scripts? the llc4320 pipeline?)
+      — list it here as you find it, and pull it over the same way.
+
+---
+
+## 5c. Repo reorganization
+
+Worth doing, and the moment is right: the `v1.0-paper-submitted` tag protects the old state
+and `git mv` preserves per-file history. The current layout has real problems — figure
+scripts, cache builders, exploratory one-offs and a 139 KB devlog all sit flat in one
+directory, and `smartosse.figures` is not even installed (§3).
+
+Proposed target:
+
+```
+smartosse/
+├── README.md  ROADMAP.md  LICENSE  CITATION.cff
+├── pyproject.toml  environment.yml  environment-lock.yml
+├── Dockerfile  Makefile
+├── docs/
+│   ├── reproducibility.md      # the tier table
+│   ├── data-access.md          # ASTE, nature run, JRA-55
+│   ├── model-setup.md          # §5b
+│   └── devlog/                 # STATUS.md, split per figure
+├── model/                      # §5b — Tier 2 provenance
+│   ├── README.md               # MITgcm c68v @ 285cda8c7
+│   ├── code/                   # code_froman
+│   ├── namelists/{base,experiments}/
+│   └── build/  jobs/
+├── src/smartosse/              # src layout
+│   ├── paths.py                # §4
+│   ├── io/        bp.py dataset.py nr.py utils.py
+│   ├── osse/      osse.py patm.py
+│   ├── viz/       plot.py cmaps.py
+│   └── figures/
+│       ├── MANIFEST.yml        # §5
+│       ├── paper/              # fig1..fig10, SI
+│       ├── cache/              # gen_*.py builders
+│       └── exploratory/        # davis_*, gates_*, nares_*
+├── tests/
+└── data/                       # DOI-backed caches, gitignored
+```
+
+Decisions embedded above, each arguable:
+
+- **Keep `figures/` inside the package.** It is importable today and `python -m
+  smartosse.figures.fig10_patm_mechanism` already works for 29 modules. Moving it out would
+  trade a working interface for tidiness.
+- **Adopt `src/` layout.** Cheap now, and it would have caught the "`smartosse.figures` isn't
+  in `packages=`" bug (§3) immediately.
+- **Split `io`/`osse`/`viz`.** Optional. It is the most invasive change here and the one
+  most likely to churn imports for modest gain — reasonable to skip or defer.
+- **`model/` at top level, not under the package.** It is Fortran and namelists, not Python.
+
+Sequencing: do this **after** §3 (packaging) and §4 (paths), so imports are already
+centralized, and **before** §6 (README/gallery), so the docs describe the final shape.
+Add a smoke test that every module still imports (§2) *before* starting, and move with
+`git mv` only.
+
+One caution: the manuscript is in review. Nothing above changes figure output, but if a
+reviewer asks for a re-render mid-reorg, render from the `v1.0-paper-submitted` tag rather
+than racing to fix the working tree.
+
+---
+
+## 6. Documentation
+
+- [ ] **README rewrite.** It is currently four lines. Target structure:
+  1. Hero image (see §7) + title + badges (tests, coverage, DOI, license, docker)
+  2. Two sentences on what a SMART cable OSSE *is* — most readers, technical or scientific,
+     will not know
+  3. The tier table from §0
+  4. Quickstart: three commands to a reproduced figure
+  5. Figure gallery — thumbnail grid linking each paper figure to the script that made it.
+     This is the single best README element available to you; the figures are genuinely
+     striking and there are ~15 of them.
+  6. Architecture: the `gen_* → cache → make_fig` flow, as a diagram
+  7. Repo map, citation, license
+- [ ] `CITATION.cff` — so GitHub renders a "Cite this repository" button.
+- [ ] **`STATUS.md` (139 KB, 59 sections) is an asset, but it is in the wrong place.** It is a
+      detailed engineering log with real rigor in it ("verified after writing: PNG alpha == 255
+      everywhere, and both image streams in the PDF unfilter to exactly their expected byte
+      counts"). That is exactly the kind of thing that impresses a careful reader — and exactly
+      the kind of thing that drowns a casual one. Split it per-figure into `docs/devlog/`,
+      link from the figure gallery, and pull three or four of the best findings into a short
+      "Notes on figure fidelity" page. Same for `SI_FH_HOVMOLLER_STATUS.md`,
+      `SI_BAROTROPIC_TIMESCALE_STATUS.md`, `DavisStrait_fw_decompisition_plan.md` (117 KB).
+- [ ] A `docs/` site (mkdocs-material → GitHub Pages) once the above exists. Low effort,
+      disproportionate polish.
+- [ ] Short `CONTRIBUTING.md` / `docs/data-access.md` explaining, without apology, exactly how
+      to get ASTE, the nature run (ECCO portal + the Poseidon Project reference already cited
+      in the paper), and JRA-55. Being the person who wrote down where the hard-to-find data
+      lives is a contribution in itself.
+
+---
+
+## 7. The flashy visuals
+
+Ranked by impact-per-hour. Pick one hero, not three.
+
+1. **Animated skill evolution over optimization iterations** — *recommended hero.* You already
+   have `data/si_skill_over_optim.nc` cached, so this needs no new model runs. A GIF of the
+   skill map filling in as the adjoint iterates is immediately legible to someone who knows
+   nothing about oceanography: "the model learns the ocean from cable data." Put it at the top
+   of the README.
+2. **Fig. 1 global cable network** as a README banner — already rendered
+   (`fig1_global_cables_multiline_legend.png`), needs only cropping. Nearly free.
+3. **Daily OBP anomaly animation over the SPNA with the cable overlaid** — the "what is being
+   observed" shot. Needs the nature run, so it is a one-time render you commit as a GIF/MP4.
+4. **Redraw `osse_flowchart.pdf` as a clean SVG** for the README's architecture section.
+   Theme-aware SVG so it reads in dark mode.
+5. A skill dashboard / interactive figure browser — genuinely cool, clearly out of scope until
+   everything above is done. Flag as stretch.
+
+Practical notes: keep GIFs under ~5 MB or host them in a `gh-pages`/release asset rather than
+the repo. Every README image needs alt text.
+
+---
+
+## 8. Stretch / nice-to-have
+
+- [ ] `pre-commit` with `ruff` + `black`. CI already runs flake8 with `--exit-zero`, i.e. it
+      reports and ignores. Either enforce or drop the pretense.
+- [ ] Type hints on the public API (`BPReader`, `NatureRun`, `NRLoader` are already dataclass-ish
+      and would take them cleanly).
+- [ ] A Colab/Binder notebook that renders **one** figure from the small caches
+      (`sigma_patm_std_2012.nc` is 816 KB, `ib_ctrl_freqs.nc` is 12 KB). "Run it in your
+      browser, no install" is a strong README button and needs almost nothing.
+- [ ] GitHub release tagged to the accepted paper, wired to the Zenodo DOI.
+- [ ] Repo social preview image + topics/tags so it looks intentional when shared.
+
+---
+
+## Suggested order
+
+The dependency structure matters more than the numbering above:
+
+0. ~~**Tag `v1.0-paper-submitted`.**~~ ✅ done (`1a7a1b4`, tagged locally, not yet pushed).
+1. ~~**§2 — fix the two failing tests.**~~ ✅ done (`49cd5a5`, 2 passed). Prints and CI still open.
+2. **§5b — get the namelists and code mods off `/scratch`.** Promoted to the top: it is
+   ~550 KB, it is what the paper already promises, and it is the only item here with a
+   deadline imposed by someone else's purge policy.
+3. **§1 — hygiene and triage.** Mostly deletion and `git add`. Makes everything after easier
+   to reason about.
+4. **§3/§4 — env + paths.** Unblocks Docker and Tier 0.
+5. **§5c — reorganization.** After paths, before docs.
+6. **§5 — the manifest and the driver.** The real engineering.
+7. **§2 (rest) — logging, broader tests, green CI.**
+8. **§6/§7 — README, gallery, hero image.** Do this *last*, when the claims it makes are true.
+
+---
+
+## Risks to keep in view
+
+- **Do not refactor the figures out from under the manuscript.** It is in review; reviewers may
+  ask for a re-render. The `v1.0-paper-submitted` tag is the insurance policy, but also prefer
+  additive changes (add a driver, add a path resolver with old defaults intact) over rewrites
+  until the paper is accepted.
+- **Matplotlib version fidelity.** Per `STATUS.md`, figure correctness depends on 3.4.3-era
+  behavior and explicit PDF post-processing. A "let's modernize the deps" pass could silently
+  degrade published figures. Pin, comment, and visually diff if you ever bump.
+- **`/scratch` purge.** See §5b. The single irreversible risk in this document; everything
+  else here is work that can be done later at the same cost.
+- **Scope.** Every item here is optional except the tier framing and the green CI. A repo with
+  a clear README, passing tests, and one great animation beats a repo with a half-finished
+  docs site.
+- **Don't oversell.** The README should say plainly that Tiers 1–2 need HPC-scale inputs. A
+  reader who discovers that themselves after a failed `docker run` trusts nothing else on the
+  page; a reader who was told up front reads the rest as credible.
