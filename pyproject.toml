@@ -1,0 +1,47 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "smartosse"
+version = "0.1.0"
+description = "SMART Cable data assimilation and OSSE analysis utilities"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [
+    { name = "Matthew Goldberg", email = "matthew.goldberg10@utexas.edu" },
+]
+requires-python = ">=3.9"
+
+# Kept deliberately light -- these are what smartosse.bp / .utils / .dataset
+# (the data-extraction path) actually import. The plotting stack
+# (cartopy, matplotlib, cmocean, pyresample, ecco_v4_py) is NOT listed here:
+# smartosse/__init__.py resolves submodules lazily (PEP 562), so a bare
+# `pip install smartosse` + `from smartosse.bp import BPReader` needs none of
+# it -- see smartosse/__init__.py's own docstring and environment-extract.yml.
+# Anyone using the plotting modules (smartosse.plot, smartosse.osse, figures/)
+# needs the `plotting` extra below, or environment.yml for the full stack.
+dependencies = [
+    "numpy",
+    "scipy",
+    "xarray",
+    "xmitgcm",
+    "tabulate",
+]
+
+[project.optional-dependencies]
+plotting = [
+    "matplotlib",
+    "cartopy",
+    "cmocean",
+    "pyresample",
+    "ecco_v4_py",
+    "xgcm",
+]
+dev = [
+    "pytest>=2.8",
+    "flake8",
+]
+
+[tool.setuptools.packages.find]
+include = ["smartosse*"]

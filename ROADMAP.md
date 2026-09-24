@@ -160,12 +160,18 @@ deterministic fixture is being overwritten but the `bad_vals` default now also e
 **Verified bug:** `osse.py` imports `ecco_v4_py`, and `setup.py` lists it — but
 `environment.yml` does not. Anyone following the README's env gets an ImportError.
 
-- [ ] `environment.yml` says `name: base`. Rename to `smartosse`.
-- [ ] Add `ecco_v4_py` to `environment.yml`; drop `typing` from both files (stdlib since 3.5).
-- [ ] `setup.py` → `pyproject.toml`. Version is `"0.0"`; set a real one. Note `setup.py` also
-      only declares `packages=['smartosse']`, so **`smartosse.figures` is not installed** —
-      `python -m smartosse.figures.fig10_patm_mechanism` works from a source checkout but not
-      from an install. Use `find_packages()`.
+- [x] ~~`environment.yml` says `name: base`. Rename to `smartosse`.~~ done.
+- [x] ~~Add `ecco_v4_py` to `environment.yml`~~ done (verified installable via conda-forge — the
+      exact build present in the working `esmpy` conda env on this machine, `conda-meta` checked
+      directly rather than assumed). ~~drop `typing` from both files~~ done (also dropped from
+      `pyproject.toml`'s deps, which never had it to begin with).
+- [x] ~~`setup.py` → `pyproject.toml`.~~ done — version `0.1.0`, `[tool.setuptools.packages.find]`
+      (fixes `smartosse.figures` not being installed — verified with a real `pip install -e .`
+      + `import smartosse.figures` in the extract env, not just read by inspection). Split
+      dependencies: light `numpy/scipy/xarray/xmitgcm/tabulate` as the base install (matches
+      what `environment-extract.yml` needs), heavy plotting stack as an optional
+      `smartosse[plotting]` extra, dev tools as `smartosse[dev]`. `setup.py` deleted.
+      `pytest tests/` still 2 passed against the reinstalled package.
 - [ ] Pin versions. `STATUS.md` records rendering workarounds specific to **matplotlib 3.4.3**
       (`patch_pdf_indexed_image_bitdepth()`, the `transparent=True` coastline-speckle bug).
       Those pins are load-bearing for figure fidelity — say so in a comment.
