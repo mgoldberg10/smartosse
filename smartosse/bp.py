@@ -207,7 +207,7 @@ class BPReader:
         self.ds['sigma'] = sigma.where(sigma != -9999.).squeeze()
         self.ds['weight'] = self.ds.sigma.where((self.ds.sigma != 0) & ~np.isnan(self.ds.sigma)) ** -2
 
-    def get_sensors(self, bad_vals=[0., -9999.]):
+    def get_sensors(self, bad_vals=(0., -9999.)):
         """
         Find coordinates of sensors for fixed-in-time pointwise bp data.
     

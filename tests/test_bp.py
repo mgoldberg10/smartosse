@@ -133,7 +133,7 @@ def test_get_sensors_with_deterministic_field(mock_read, mock_meta, mock_environ
     bpr.ds["bpdifanom_raw"] = generate_deterministic_bpdifanom()
 
     # Run the real method
-    bpr.get_sensors(bad_val=0.0)
+    bpr.get_sensors(bad_vals=[0.0])
 
     # Capture printed output
     out = capsys.readouterr().out
