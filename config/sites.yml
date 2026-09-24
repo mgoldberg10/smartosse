@@ -1,0 +1,68 @@
+# Site-keyed path configuration for smartosse.paths (ROADMAP.md §4/§4b).
+#
+# Detection is a convenience, never the only way in: SMARTOSSE_SITE and any
+# SMARTOSSE_<KEY> environment variable always win over what's in this file
+# (see smartosse/paths.py). A new machine is therefore a one-line env-var
+# export, not a required code or config change.
+#
+# Every key here is optional. In particular `run_root` (Tier 1: regenerating
+# caches from run output) is expected to be ABSENT for a site like `docker`
+# that only ever works from shipped caches (Tier 0) -- code that assumes
+# run_root exists is code that cannot run at Tier 0, which is the bug this
+# file exists to prevent.
+
+sites:
+  pfe:
+    # NASA Advanced Supercomputing. Confirmed: login nodes are pfeNN
+    # (this file was written from pfe20). Compute-node naming not directly
+    # observed this session -- the r*i*n* pattern is carried over from an
+    # earlier planning pass and should be verified before being relied on.
+    detect:
+      hostname: ["pfe*", "r*i*n*"]
+    run_root: /nobackupp27/mgoldbe1/aste_270x450x180/osses
+    # Best-effort guess, NOT verified against a job script this session --
+    # the kept model/jobs/ scripts actually symlink raw *.mitgrid tiles from
+    # an external run_template (/nobackupp17/atnguye4/llc270/aste_270x450x180/
+    # run_template/input_binaries/), not a pre-processed GRID_* directory, so
+    # this may not be the right equivalent of TACC's GRID_noblank_real4/.
+    # Two processed-grid candidates exist on pfe: GRID_froman/ (matches the
+    # active code_froman experiment family -- picked for that reason) and
+    # GRID_noblank/ (unclear how it differs; roughly half the file size of
+    # GRID_froman/'s AngleCS.data, so possibly a real4-vs-real8 or
+    # tile-count difference, not just a rename). Confirm which before
+    # depending on this for anything that must match the paper's runs.
+    grid_dir: /nobackupp27/mgoldbe1/aste_270x450x180/GRID_froman
+    # Not established -- pfe-side extraction (gen_*.py) hasn't been run yet
+    # (ROADMAP §4b), so there's no cache_dir convention here yet. Falls back
+    # to the shipped smartosse/figures/data/ (repo-relative) if unset.
+    # Nature run location on pfe not confirmed this session (deferred, see
+    # docs/pfe-brief.md) -- no nr_dir entry.
+
+  tacc:
+    # TACC (Lonestar6/Stampede3), reached via the shared Stockyard
+    # filesystem -- paths say "ls6" regardless of which TACC system you're
+    # actually logged into, because /work2 is mounted across all of them
+    # and isn't purged (see ROADMAP.md §4b). /scratch, by contrast, IS
+    # purged and is Stampede3-local -- see the run_root note below.
+    detect:
+      hostname: ["*.stampede3.tacc.utexas.edu", "*.ls6.tacc.utexas.edu"]
+    # Purgeable, Tier 1 only -- this is a periodic copy of pfe's run_root
+    # (the system of record), not the original. See ROADMAP.md §4b.
+    run_root: /scratch/08381/goldberg/aste_270x450x180/osses
+    grid_dir: /work/08381/goldberg/ls6/aste_270x450x180/GRID_noblank_real4
+    nr_dir: /work/08381/goldberg/ls6/aste_270x450x180/run_template/input_ecco/smart_phibot/phibot_daily
+    basin_dir: /work/08381/goldberg/ls6/aste_270x450x180/run_template/input_basin
+    cache_dir: /work2/08381/goldberg/ls6/smartosse/smartosse/figures/data
+
+  docker:
+    # Tier 0 only, deliberately: no run_root, no grid_dir, no nr_dir. Code
+    # that only reads from cache_dir works here; code that assumes any of
+    # the others exist needs Tier 1/2 inputs this site can't provide.
+    cache_dir: /data
+
+  # Template for a contributor's own machine / a laptop. Uncomment and fill
+  # in to work from local copies of the small pieces (Tier 0 caches, or a
+  # personal copy of the grid) without editing any tracked file.
+  # local:
+  #   cache_dir: /path/to/your/smartosse/figures/data
+  #   grid_dir: /path/to/your/copy/of/GRID_noblank_real4

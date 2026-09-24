@@ -94,6 +94,7 @@ dependencies:
   - cachetools=7.2.0       # required by xmitgcm.file_utils
   - tabulate=0.10.0        # required by smartosse.bp
   - xgcm                   # required by smartosse.llc_grid (get_llc_grid/UEVNfromUXVY)
+  - pyyaml                 # required by smartosse.paths (config/sites.yml)
   - future                 # xgcm's own only non-numpy/xarray/dask dependency
   - pytest=9.1.1           # dev-only, for tests/ -- see note above
   - pip=26.2.1

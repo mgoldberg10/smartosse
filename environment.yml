@@ -1,4 +1,6 @@
-name: base
+# Full environment: analysis + plotting (TACC / Docker / a laptop). For the
+# extraction-only subset (pfe, no cartopy/matplotlib), see environment-extract.yml.
+name: smartosse
 channels:
   - conda-forge
   - defaults
@@ -14,5 +16,8 @@ dependencies:
   - xmitgcm
   - xgcm
   - cartopy
+  - cmocean
+  - pyresample
   - tabulate
-  - typing
+  - pyyaml
+  - ecco_v4_py

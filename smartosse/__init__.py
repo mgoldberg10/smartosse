@@ -30,6 +30,14 @@ notebooks are unaffected.
 #     when a name genuinely lives there.
 _SUBMODULES = ('dataset', 'utils', 'cmaps', 'bp', 'osse', 'plot')
 
+# Submodules resolved by their own name (e.g. ``from smartosse import paths``
+# returns the ``paths`` module itself), as opposed to _SUBMODULES above, which
+# is searched for names *defined inside* a module (e.g. ``BPReader`` lives in
+# ``bp``). Kept separate so `from smartosse import paths` -- a light module
+# with no heavy deps -- can never be dragged through importing `cmaps` or
+# `osse` first just because the search loop below hasn't reached `paths` yet.
+_DIRECT_SUBMODULES = ('paths', 'llc_grid')
+
 
 def __getattr__(name):
     """PEP 562 lazy attribute lookup across the submodules above."""
@@ -45,6 +53,11 @@ def __getattr__(name):
         globals()['__all__'] = sorted(names)
         return globals()['__all__']
 
+    if name in _DIRECT_SUBMODULES:
+        mod = importlib.import_module(f'.{name}', __name__)
+        globals()[name] = mod
+        return mod
+
     for mod_name in _SUBMODULES:
         mod = importlib.import_module(f'.{mod_name}', __name__)
         if hasattr(mod, name):
@@ -56,4 +69,5 @@ def __getattr__(name):
 
 
 def __dir__():
-    return sorted(set(globals()) | set(_SUBMODULES) | set(__getattr__('__all__')))
+    return sorted(set(globals()) | set(_SUBMODULES) | set(_DIRECT_SUBMODULES)
+                  | set(__getattr__('__all__')))
