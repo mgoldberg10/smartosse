@@ -63,13 +63,17 @@ were force-added past it.
       MATLAB-era cruft this item described. Unclear whether it was deleted upstream of this
       branch or never existed here — worth a `git log -- smartosse/.gitignore` check on
       `main` before assuming this is universally resolved.
-- [ ] **Triage `smartosse/figures/` (66 scripts).** ⚠️ **Not doable from pfe** — this checkout
-      only has the ~10 tracked figure-package files plus the four `gen_*.py` cache builders
-      (added 2026-09-24); none of the ~55 untracked per-figure modules `STATUS.md` describes
-      (`fig1_global_cables.py`, `davis_*`, `gates_*`, etc.) exist on this machine — they were
-      apparently only ever created on TACC (`STATUS.md` paths are all `/work2/08381/...`) and,
-      being untracked, never traveled with `git clone`/`pull`. This whole item needs to be
-      done from a TACC checkout. Buckets below are otherwise unchanged from the original plan:
+- [x] ~~**Triage `smartosse/figures/` (66 scripts).**~~ **Paper-figures bucket: tracked**
+      (Matt, `d764631`, merged in this session) — `fig1_global_cables`, `fig3_bp_std`,
+      `fig5_misfit_rmse_skill`, `fig6_regions_skill_bp_uvbt`, `fig8_smart_grace_mo_skill`
+      (renamed from `smart_grace_mo_skill`), `fig9_spread_3panel`, `fig11_ib_ctrl_freqs`
+      (renamed from `fig_ib_ctrl_freqs`), `figB_patm_std_4panel`,
+      `figD1_sensor_spacing_skill_diff` (renamed from `sensor_spacing_skill_diff`) now
+      exist and import fine on this pfe checkout — the original ⚠️ below (from earlier this
+      session, before that push) is stale for this bucket specifically. `fig7_greenland_fwflux`
+      and `si_*` are the only paper-figure-bucket names from the original list not yet tracked.
+      Exploratory/superseded bucket and the untracked core modules below are **still not
+      present on pfe** — still needs a TACC session:
   - *Paper figures* — `fig1_global_cables`, `fig3_bp_std`, `fig5_misfit_rmse_skill`,
     `fig6_regions_skill_bp_uvbt`, `fig7_greenland_fwflux`, `fig9_*`, `fig10_patm_mechanism`,
     `figB_patm_std_4panel`, `figD1_sensor_spacing_skill_diff`, `fig8_smart_grace_mo_skill`,
