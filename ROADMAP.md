@@ -57,37 +57,56 @@ oversight — `smartosse/.gitignore` line `**/figures/*` ignores the entire figu
 directory, plus `**/*.png`, `**/*.nc`, `**/*.pdf`. The handful of tracked figure modules
 were force-added past it.
 
-- [ ] Fix `smartosse/.gitignore`. It is a MATLAB-era file (`*.m~`, `*.asv`, `cable_utils/mylog.txt`)
-      that is now actively fighting the repo. The root `.gitignore` already handles
-      `figures/output/` and `figures/data/` correctly — `smartosse/.gitignore` can probably
-      be deleted outright.
-- [ ] **Triage `smartosse/figures/` (66 scripts).** Three buckets:
+- [x] ~~Fix `smartosse/.gitignore`.~~ **already gone on this branch** (checked 2026-09-24,
+      pfe checkout) — no `smartosse/.gitignore` file exists; the root `.gitignore` handles
+      `smartosse/figures/output/` and `smartosse/figures/data/` correctly and has none of the
+      MATLAB-era cruft this item described. Unclear whether it was deleted upstream of this
+      branch or never existed here — worth a `git log -- smartosse/.gitignore` check on
+      `main` before assuming this is universally resolved.
+- [x] ~~**Triage `smartosse/figures/` (66 scripts).**~~ **Paper-figures bucket: tracked**
+      (Matt, `d764631`, merged in this session) — `fig1_global_cables`, `fig3_bp_std`,
+      `fig5_misfit_rmse_skill`, `fig6_regions_skill_bp_uvbt`, `fig8_smart_grace_mo_skill`
+      (renamed from `smart_grace_mo_skill`), `fig9_spread_3panel`, `fig11_ib_ctrl_freqs`
+      (renamed from `fig_ib_ctrl_freqs`), `figB_patm_std_4panel`,
+      `figD1_sensor_spacing_skill_diff` (renamed from `sensor_spacing_skill_diff`) now
+      exist and import fine on this pfe checkout — the original ⚠️ below (from earlier this
+      session, before that push) is stale for this bucket specifically. `fig7_greenland_fwflux`
+      and `si_*` are the only paper-figure-bucket names from the original list not yet tracked.
+      Exploratory/superseded bucket and the untracked core modules below are **still not
+      present on pfe** — still needs a TACC session:
   - *Paper figures* — `fig1_global_cables`, `fig3_bp_std`, `fig5_misfit_rmse_skill`,
     `fig6_regions_skill_bp_uvbt`, `fig7_greenland_fwflux`, `fig9_*`, `fig10_patm_mechanism`,
-    `figB_patm_std_4panel`, `sensor_spacing_skill_diff`, `smart_grace_mo_skill`,
-    `fig_ib_ctrl_freqs`, `si_*`, `advfw_skill_maps`, plus the `gen_*` cache builders. **Track these.**
+    `figB_patm_std_4panel`, `figD1_sensor_spacing_skill_diff`, `fig8_smart_grace_mo_skill`,
+    `fig11_ib_ctrl_freqs`, `si_*`, `advfw_skill_maps`, plus the `gen_*` cache builders. **Track these.**
   - *Exploratory / superseded* — the `davis_*` family (13 files), `gates_*`, `nares_*`,
     `gate_sign_probe`, `debug_panel_c`, `fig7_panel_a_*`, `fig7_skeleton`,
     `davis_strait_repro_old_pipeline`. Decide: a clearly-labeled `figures/exploratory/`
     subdir, or cut. Leaning **keep in a subdir with a one-line README** — showing the
     exploration is not a weakness, showing it *undifferentiated from the final figures* is.
-  - *Delete outright* — `.fig7_skeleton.py.swp` (a stray vim swapfile, currently tracked-adjacent),
-    `fig9_patm_unc.py.pre_2x2_redesign` (**currently tracked** — git is the backup, this
-    file is the anti-pattern an interviewer will notice). `debug_panel_c.py` is already
+  - [x] ~~*Delete outright* — `.fig7_skeleton.py.swp`~~ (not present on this checkout — see
+    the pfe note above; presumably TACC-only, unaffected by this branch's fix) ~~,
+    `fig9_patm_unc.py.pre_2x2_redesign`~~ **deleted** (`git rm`, this session) — it was
+    tracked, git history is the backup. `debug_panel_c.py` was already
     gone (`914fb69`) — it was a Jupyter paste-buffer whose IPython magics were an E999.
 - [ ] Untracked core modules: `curl.py` (48 lines), `plot_new.py` (581), `slope_cable.py` (329),
       `wind_bp_fw.py` (526). ~1500 lines of real code invisible to git. Track or cut, but decide.
       Note `plot.py` (23 KB) and `plot_new.py` (20 KB) coexisting is a smell — resolve or rename.
+      **Also not present on this pfe checkout** (same story as the figure triage above) —
+      needs a TACC session.
 - [ ] Move the eight stray PNGs out of the repo root (`i2_ocean*.png`, `inset_*.png`,
-      including one with parentheses and the word "current" in the filename).
+      including one with parentheses and the word "current" in the filename). **Not present
+      on this pfe checkout** — needs a TACC session.
 - [ ] Decide on `smartosse/tex/` (the full manuscript source, currently untracked). Options:
       keep it out entirely until acceptance; a private sibling repo; or a `paper/` dir added
       at acceptance. **Recommend: leave it out for now**, revisit post-review.
 - [x] ~~`smartosse/__init__.py` six `from .x import *` lines~~ done (`ee84bf4`). Not a
       30-second cosmetic fix as originally filed — it was the blocker for both CI and pfe.
 - [ ] Scrub the public tree for the TACC account number (`08381`) and personal absolute paths.
-- [ ] `LICENSE` file — there is none. `setup.py` says `license=''` and `keywords='MIT License'`
-      (the license got typed into the keywords field). Pick one and add the file.
+      Deferred on purpose: the real fix is §4's `paths.py`/`sites.yml` env-var resolver, not
+      find-and-redact; scrubbing first would just mean re-editing the same lines twice.
+- [x] ~~`LICENSE` file — there is none.~~ done, this session: added `LICENSE` (MIT, matching
+      `setup.py`'s pre-existing `keywords='MIT License'` signal) and fixed `setup.py`'s
+      `license=''`/`keywords='MIT License'` (the license-in-keywords typo) to `license='MIT'`.
 
 ---
 
@@ -229,8 +248,13 @@ at TACC. Stampede3 purges scratch, so the copies evaporate; pfe remains the syst
 - **`import smartosse.bp` pulls cartopy and matplotlib too**, via the `from .plot import *`
   chain in `__init__.py`. So the §1 "star imports are ugly" item is not cosmetic — it is the
   thing that makes a lightweight install impossible.
-- **`asteoptim` is an undeclared dependency**, imported by `dataset.py`, `osse.py`,
-  `wind_bp_fw.py`, `slope_cable.py` and listed in neither `setup.py` nor `environment.yml`.
+- ~~`asteoptim` is an undeclared dependency~~ **correction, 2026-09-24**: `dataset.py`/
+  `osse.py` only ever matched this grep via `open_asteoptimdataset` (a function *name*, not
+  an import) — that function is defined locally in `dataset.py`. The one real
+  `from asteoptim.dataset import ...` was in `gen_gate_caches.py`, and it turned out to be
+  an outdated predecessor of this package, not a real external dependency — see §4b below.
+  `wind_bp_fw.py`/`slope_cable.py` weren't re-checked (still untracked, not present on this
+  branch — see §1).
 
 ### Recommended architecture: move the extraction to the data, not the data to the extraction
 
@@ -264,14 +288,34 @@ Three decoupling tasks make that env possible, and all three are things the repo
       lazy `__getattr__`. `from smartosse.bp import BPReader` now pulls none of cartopy,
       matplotlib, cmocean, pyresample or ecco_v4_py. `utils.py`'s module-level matplotlib
       import went local at the same time.
-- [ ] **Break the `ecco_v4_py` dependency out of the extraction path.** Either vendor
-      `get_llc_grid` / `UEVNfromUXVY` (two functions, ECCO is MIT-licensed — check and
-      attribute), or import them lazily inside the functions that call them. This removes the
-      single hardest-to-install package from the pfe-side requirements.
-- [ ] **Declare `asteoptim`** and work out whether it is pip-installable on pfe, vendorable,
-      or needs to be a sibling repo of yours. It is currently an invisible hard requirement.
-- [ ] Then: `environment-extract.yml` (pfe, ~6 packages) alongside `environment.yml` (full,
-      TACC + Docker). CI can test the extract env on plain ubuntu, which it cannot do today.
+- [x] ~~**Break the `ecco_v4_py` dependency out of the extraction path.**~~ done: vendored
+      `get_llc_grid` / `UEVNfromUXVY` into `smartosse/llc_grid.py` (MIT, attributed, copied
+      from `ecco_v4_py` 1.6.0 — both functions only ever needed numpy/xarray/xgcm; the
+      cartopy/matplotlib/shapely/pyproj pull was `ecco_v4_py`'s own `__init__.py`, not
+      these two functions). `osse.py` and `figures/gen_gate_caches.py` now import from
+      `.llc_grid` instead. `osse.py`'s `_plot_skill` also gained local `from .plot import
+      spna` / `from .cmaps import Colormaps` (were module-level, so importing `osse.py`
+      for `NatureRun`/`ForecastModel`/`OSSE` — as every `gen_*.py` cache builder does —
+      silently pulled the whole plotting stack in anyway). Same fix applied to `patm.py`'s
+      module-level `matplotlib.pyplot` (moved local to `plot_jra_vs_aste_cable_variability`,
+      the one function that needs it) after it turned out `gen_patm_uncertainty_fields.py`
+      imports `patm.load_forcing_generic` and was tripping over it. One more found the same
+      way: `gen_appendixB_skill_cache.py` imported three path constants from
+      `fig9_patm_unc.py` — a plotting module — for no other reason; those three are now
+      duplicated locally there (a comment says to keep them in sync) rather than editing
+      `fig9_patm_unc.py` itself, per the "don't touch figure modules mid-review" risk below.
+      **`asteoptim` turned out not to need declaring at all** — its one call site
+      (`gen_gate_caches.py`'s `from asteoptim.dataset import open_astedataset,
+      open_asteoptimdataset`) was pointed at an outdated predecessor of this very package;
+      swapped for `smartosse.dataset`'s own (signature-compatible) versions. Same for
+      `smartcables`, elsewhere flagged as a wildcard-import smell — also an outdated
+      predecessor, not a real dependency.
+      **Verified** (`use-extract` env on pfe, 2026-09-24): all four `gen_*.py` cache
+      builders import clean with zero `cartopy`/`matplotlib`/`ecco_v4_py`/`cmocean`/
+      `pyresample` in `sys.modules` afterward, and `pytest tests/ -q` still 2 passed.
+- [x] ~~Then: `environment-extract.yml`~~ existed already; added `xgcm` + `future` (both
+      light — xgcm depends on nothing but xarray/dask/numpy/future) for `llc_grid.py`, and
+      installed them into the live `/home3/mgoldbe1/envs/extract` env. CI-on-ubuntu still open.
 
 ### The config file: key on *site*, not on machine-type branching in code
 
@@ -342,32 +386,41 @@ That is not a stretch goal, it is an afternoon.
 > off scratch before anything else in this section.** Copying 550 KB is cheap insurance;
 > re-deriving a lost namelist set after acceptance is not.
 
-- [ ] **Rescue first, organize later.** `rsync` the `data*` + `code_froman/` from the runs
-      that matter into the repo (or anywhere on `/work`) today.
-- [ ] Decide which runs to include. Only **7 of 67** dirs under `osses/` carry a full
-      namelist set; the rest are per-region/per-iteration children. Candidates, from the
-      figure scripts and `STATUS.md`:
-      `runc68v_froman_partialcables_jraspread/201201/{fullnatl,labsea,subgyre,newfoundland,northsea}`,
-      `runc68v_froman_partialcables_jraspread_spacing/201201/{70km,140km}`,
-      `runc68v_froman_natl_1month_alldailyxx_*` (the `noapress`, `fixbpweight`, `gracellc4320`
-      variants), and the nature-run extraction under `osses/naturerun/`.
-- [ ] Record the MITgcm version precisely: **checkpoint68v, upstream commit `285cda8c7`**.
-      Since the local tree is a git clone, anyone can `git clone MITgcm && git checkout 285cda8c7`.
-      That single line does more for Tier 2 reproducibility than any amount of prose.
-- [ ] Capture the build recipe: the optfile used, `genmake2` invocation, `SIZE.h` /
-      `data.exch2` tile decomposition (several variants present:
-      `data_exch2_{15x15x823,18x18x580,30x30x242,…}` — say which one the paper's runs used),
-      and the job submission scripts.
-- [ ] Capture the **optimization** side too — the runs are adjoint/optim
-      (`iter0000`…`iter0020`); the ECCO `optim` driver and its settings are as load-bearing
-      as the forward namelists.
-- [ ] Diff the namelist sets across experiments and commit **one base set plus per-experiment
-      deltas**, rather than 7 near-identical 187 KB copies. The per-iteration dirs already
-      demonstrate the pattern: only `data.ctrl` and `data.ecco` vary.
+- [x] ~~**Rescue first, organize later.**~~ done, 2026-09-24 — `model/code/froman/` (the
+      `code_froman/` modifications) and `model/namelists/<run>/` for all **7 run families** the
+      currently-tracked figure code actually reads: `partialcables_jraspread` (all 5 regions),
+      `partialcables_jraspread_spacing` (70/140/210km), `partialcables_jrastd_daytoday`,
+      `ib_freq2` (7 frequencies), `gracellc4320_sc_spread`, `gracellc4320_spread`. Not the
+      `noapress`/`fixbpweight` candidates originally guessed at above — those turned out not to
+      match what the code imports (see ROADMAP's own correction near the `asteoptim` note); the
+      actual set was determined by grepping the tracked `smartosse/figures/*.py`/`gen_*.py` for
+      the `runc68v_*` strings they open, not guessed from `STATUS.md` prose. Nature-run
+      extraction under `osses/naturerun/` explicitly deferred (Matt, needs manual intervention).
+      **Found and worked around en route**: a `cleanup.bash` at each run root had *already*
+      deleted the real namelists from `partialcables_jraspread` (4/5 regions) and
+      `partialcables_jraspread_spacing` (all 3 spacings) before this session — reconstructed
+      from `STDOUT.0000`, which MITgcm always echoes every namelist into and which `cleanup.bash`
+      preserves; see `model/README.md` for the exact method and how it was verified.
+- [x] ~~Record the MITgcm version precisely~~ done: **checkpoint68v, upstream commit
+      `285cda8c7`** — `model/README.md`.
+- [ ] Capture the build recipe: the optfile used, `genmake2` invocation is only partially done
+      (compiler `ifort 19.1.3.304`, MPI HPE MPT 2.30, from `genmake.log` — but not the optfile
+      name itself yet). `SIZE.h`/`data.exch2` tile decomposition: multiple variants are now
+      committed (`model/namelists/*/base/data_exch2_*`), but which one each run actually used at
+      submission time hasn't been cross-checked against `STDOUT.0000` the way the ctrl/ecco
+      values were. Job submission scripts: done, `model/jobs/`.
+- [x] ~~Capture the **optimization** side too~~ done — `model/optim/` (collapsed to a single
+      template across the 6 `OPTIM*/` families once it turned out `data.optim`'s only real
+      per-run content, `numiter`/`nupdate`/`coldstart`, is regenerated by every job script's own
+      heredoc; see `model/README.md`).
+- [x] ~~Diff the namelist sets across experiments and commit **one base set plus per-experiment
+      deltas**~~ done — `model/namelists/<run>/base/` + one dir per region/frequency/spacing
+      holding only `data.ctrl`/`data.ecco` (or just `data.ctrl` for the `ib_freq2` frequency
+      sweep, where only that file varies). 2.0 MB total across all 7 run families, not 7×187 KB.
 - [ ] `docs/model-setup.md`: version → clone → apply `code/` → build → namelists → run →
       what output feeds Tier 1. Be explicit that this needs HPC and is not push-button.
 - [ ] Anything genuinely only on **pfe** (nature-run extraction scripts? the llc4320 pipeline?)
-      — list it here as you find it, and pull it over the same way.
+      — list it here as you find it, and pull it over the same way. Deferred (Matt).
 
 ---
 

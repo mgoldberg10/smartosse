@@ -8,8 +8,7 @@ setup(
         author      = "Matthew Goldberg",
         author_email= 'matthew.goldberg10@utexas.edu',
         description = 'SMART Cable data assimilation utilities',
-        license     = '',
-        keywords    = 'MIT License',
+        license     = 'MIT',
         url         = '',
         install_requires=[
             'numpy',

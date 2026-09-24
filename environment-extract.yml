@@ -1,0 +1,104 @@
+# environment-extract.yml
+#
+# Minimal environment for the DATA-EXTRACTION half of smartosse on NAS pfe.
+# Companion to ROADMAP.md §4b / docs/pfe-brief.md. Deliberately contains NO
+# cartopy, matplotlib, pyresample, esmpy or ecco_v4_py -- all plotting happens
+# on TACC. See "Why" below before adding to this list.
+#
+# xgcm is here because smartosse.llc_grid (get_llc_grid/UEVNfromUXVY, vendored
+# from ecco_v4_py -- see that module's docstring) needs it; xgcm itself only
+# depends on xarray/dask/numpy/future, so it costs nothing cartopy-shaped.
+#
+# ---------------------------------------------------------------------------
+# WHERE THIS MUST LIVE:  /home3/mgoldbe1/envs/extract   (home3, NFS)
+#                        NOT on /nobackupp27 (Lustre).
+#
+# Measured on pfe20, identical package set, cold `import numpy, xarray, pandas,
+# xmitgcm, netCDF4, dask`:
+#
+#     old esmpy env  (78,143 files, Lustre) : 2m35s wall /  7.0s CPU
+#     this env       (15,997 files, Lustre) :    28s wall /  7.0s CPU
+#     this env       (15,997 files, home3 ) :   2.1s wall /  2.0s CPU   <-- use this
+#
+# On Lustre >95% of the wall time is metadata I/O wait, not CPU and not the
+# conda solver. Shrinking the env helped 5x; moving it off Lustre did the rest.
+# On home3 wall time == CPU time, i.e. the import is no longer I/O-bound at all.
+#
+# home3 has an 8 GB quota but NO inode limit; this env is ~560 MB / 16k files.
+# /nobackupp27 has an inode quota that is currently over its soft limit, which
+# is a second, independent reason not to put conda envs there.
+#
+# A sibling copy of this file lives at
+# /nobackupp27/mgoldbe1/smart_uq/environment-extract.yml for a different
+# project on the same env -- this copy is the one that travels with smartosse.
+# ---------------------------------------------------------------------------
+#
+# REBUILD:
+#   export MAMBA_ROOT_PREFIX=/nobackupp27/mgoldbe1/mamba
+#   micromamba create -y -p /home3/mgoldbe1/envs/extract -f environment-extract.yml
+#   /home3/mgoldbe1/envs/extract/bin/pip install --no-deps --no-cache-dir xmitgcm==0.5.2
+#
+#   (micromamba binary: /nobackupp27/mgoldbe1/bin/micromamba, v2.9.0.
+#    Installs need the NAS proxy, which the default login env already sets:
+#    http_proxy=https_proxy=http://cerberus.nas.nasa.gov:3128)
+#
+# USE -- do NOT run `conda activate`, it costs 7-14s of Lustre I/O for nothing.
+# A bare PATH prepend is enough (verified in a fully clean `env -i` shell):
+#
+#   export PATH=/home3/mgoldbe1/envs/extract/bin:$PATH
+#
+# There are no activation scripts to run: the conda-forge netCDF4/HDF5 builds
+# resolve their libraries via RPATH, so no LD_LIBRARY_PATH is required.
+#
+# NOTE on xmitgcm: it is installed with pip --no-deps on purpose. The conda-forge
+# xmitgcm recipe depends on the `dask` metapackage, which drags in pyarrow +
+# libarrow (several hundred MB and thousands of files) that this workload never
+# touches. `dask-core` + `cachetools` is all xmitgcm 0.5.2 actually imports.
+#
+# NOTE on pytest: not part of the original "six packages" extraction goal --
+# added so `python -m pytest tests/ -q` can be verified against this exact env
+# (2 passed in ~2s, matching ROADMAP.md §2). Dev-only; the gen_* cache builders
+# never import it.
+#
+# VERIFIED against this repo, 2026-09-24, with this env active:
+#   python -c "from smartosse.bp import BPReader; print('ok')"        -> ok
+#   python -m pytest tests/ -q                                        -> 2 passed, 1.98s
+#   the cartopy/matplotlib/ecco_v4_py/cmocean/pyresample leak check    -> []  (empty)
+# All three hold because of the PEP 562 lazy __getattr__ rewrite of
+# smartosse/__init__.py (ee84bf4) and utils.py's matplotlib import going local
+# in the same commit.
+#
+# UPDATE, same day: osse.py's module-level ecco_v4_py import is now
+# smartosse/llc_grid.py (vendored, xgcm-only -- see that module); patm.py's
+# module-level `import matplotlib.pyplot` moved local to the one function
+# that plots; gen_gate_caches.py's `from asteoptim...` (an old predecessor
+# of this package) now reads from smartosse.dataset instead, and its
+# ecco_v4_py imports also point at llc_grid; gen_appendixB_skill_cache.py no
+# longer imports fig9_patm_unc.py (a plotting module) just for three path
+# constants -- they're duplicated locally instead. All four gen_*.py cache
+# builders should now import clean in this env -- re-verify the leak check
+# above against each of them once xgcm is installed here.
+
+name: extract
+channels:
+  - conda-forge
+dependencies:
+  # pinned to what was solved and verified on pfe20, 2026-09-24
+  - python=3.12.14
+  - numpy=2.5.3
+  - scipy=1.18.1
+  - pandas=3.0.6
+  - xarray=2026.7.0
+  - netcdf4=1.7.4          # nompi build; abi3, hence the py311 build string
+  - dask-core=2026.8.0     # NOT `dask` -- see note above
+  - cachetools=7.2.0       # required by xmitgcm.file_utils
+  - tabulate=0.10.0        # required by smartosse.bp
+  - xgcm                   # required by smartosse.llc_grid (get_llc_grid/UEVNfromUXVY)
+  - future                 # xgcm's own only non-numpy/xarray/dask dependency
+  - pytest=9.1.1           # dev-only, for tests/ -- see note above
+  - pip=26.2.1
+  # transitive pins worth recording (set by the solver, listed for reproducibility)
+  - hdf5=2.2.0             # nompi_hc529623_100
+  - libnetcdf=4.10.1       # nompi_he3e3c8e_201
+  - pip:
+      - xmitgcm==0.5.2
