@@ -32,7 +32,7 @@ Proposed tiers, to be stated up front in the README:
 | Tier | What you can do | What you need | Status today |
 |---|---|---|---|
 | **0** | Regenerate **every paper figure** from shipped caches | `docker run`, ~200 MB download | Latent in the code; needs a driver + published caches |
-| **1** | Regenerate the caches from run output | The optimization run directories (TACC/`/work`) | Works, paths hardcoded |
+| **1** | Regenerate the caches from run output | The optimization run directories (pfe; copies on TACC `/scratch`) | Works, paths hardcoded; runs on the wrong machine (§4b) |
 | **2** | Regenerate run output | ASTE build + adjoint + nature run + JRA-55 | Inputs located and tiny (§5b) — needs rescuing off `/scratch` |
 
 Tier 0 is the whole game. It is what an interviewer clicks, and it is what a reviewer
@@ -201,6 +201,115 @@ exists and just needs a name and a driver.
       availability statement alongside the GitHub URL — which closes the loop on the
       reproducibility claim the manuscript already makes.
 - [ ] Audit the caches for anything not intended to be public before uploading.
+
+---
+
+## 4b. Multi-site topology — pfe / Stampede3 / anywhere
+
+**The situation.** Runs execute and live on **pfe** (NASA). Output is periodically copied to
+**Stampede3 `/scratch`** because the pfe Python environment is broken, and analysis happens
+at TACC. Stampede3 purges scratch, so the copies evaporate; pfe remains the system of record.
+
+**Verified facts that decide the design:**
+
+- This machine is `c454-082.stampede3.tacc.utexas.edu`. `/work2` is the **shared Stockyard
+  filesystem** (6.8 PB, mounted across TACC systems, **not purged**) — which is why paths say
+  `ls6` while we are on Stampede3. `/scratch` is Stampede3-local and **is** purged.
+  So the "rescue off scratch" in §5b is mostly just `cp` to `/work2`, which is already there.
+- **The cache builders need neither cartopy nor matplotlib.** `gen_gate_caches`,
+  `gen_appendixB_skill_cache`, `gen_patm_uncertainty_fields`, `gen_patm_daytoday_weight_Pa`
+  import only numpy / xarray / pandas / xmitgcm / ecco_v4_py.
+- **But `ecco_v4_py` drags in the entire plotting stack.** Measured: importing
+  `ecco_v4_py.ecco_utils` pulls `cartopy, matplotlib, shapely, pyproj, xgcm, scipy` — and it
+  is used for exactly **two functions**, `get_llc_grid` and `UEVNfromUXVY`.
+- **`import smartosse.bp` pulls cartopy and matplotlib too**, via the `from .plot import *`
+  chain in `__init__.py`. So the §1 "star imports are ugly" item is not cosmetic — it is the
+  thing that makes a lightweight install impossible.
+- **`asteoptim` is an undeclared dependency**, imported by `dataset.py`, `osse.py`,
+  `wind_bp_fw.py`, `slope_cable.py` and listed in neither `setup.py` nor `environment.yml`.
+
+### Recommended architecture: move the extraction to the data, not the data to the extraction
+
+```
+pfe  ──────────────────────────►  TACC /work2  ──────────►  anywhere
+run output          gen_*.py      .nc caches      make_fig      figures
+(TB, stays put)   (extraction)   (~180 MB)       (plotting)
+                   needs: numpy, xarray,          needs: + cartopy,
+                   pandas, xmitgcm, netcdf4       matplotlib, LaTeX
+```
+
+Today the split is in the wrong place: **bulk run output** crosses the wire onto purgeable
+scratch, and extraction happens at the far end. Run `gen_*` **on pfe, next to the data**, and
+only the ~180 MB of `.nc` caches ever move — onto `/work2`, which is not purged. The purge
+problem disappears rather than being managed.
+
+The happy accident is that this is the *same* boundary as the Tier 0 / Tier 1 split in §0.
+One piece of work fixes the purge problem, the transfer problem, the pfe problem, and
+reproducibility at once.
+
+### So: is it worth fixing Python on pfe? Yes — but a much smaller env than you think
+
+Not a full analysis environment. An **extraction-only** environment: numpy, xarray, pandas,
+xmitgcm, netcdf4, dask. No cartopy (almost certainly what is broken — it needs GEOS/PROJ
+system libraries), no matplotlib, no LaTeX. Micromamba in user space, no admin needed.
+Call it a half-day.
+
+Three decoupling tasks make that env possible, and all three are things the repo wants anyway:
+
+- [ ] **Stop `__init__.py` importing the plotting stack.** Explicit imports, or lazy
+      `__getattr__`. Until this is done, nothing can import `smartosse` without cartopy.
+- [ ] **Break the `ecco_v4_py` dependency out of the extraction path.** Either vendor
+      `get_llc_grid` / `UEVNfromUXVY` (two functions, ECCO is MIT-licensed — check and
+      attribute), or import them lazily inside the functions that call them. This removes the
+      single hardest-to-install package from the pfe-side requirements.
+- [ ] **Declare `asteoptim`** and work out whether it is pip-installable on pfe, vendorable,
+      or needs to be a sibling repo of yours. It is currently an invisible hard requirement.
+- [ ] Then: `environment-extract.yml` (pfe, ~6 packages) alongside `environment.yml` (full,
+      TACC + Docker). CI can test the extract env on plain ubuntu, which it cannot do today.
+
+### The config file: key on *site*, not on machine-type branching in code
+
+Yes, do this — but resist `if on_pfe: ... elif on_stampede: ...` scattered through modules.
+One `config/sites.yml`, one resolver (`smartosse/paths.py`, §4):
+
+```yaml
+sites:
+  pfe:
+    detect: {hostname: ["pfe*", "r*i*n*"]}
+    run_root:  /nobackup/<user>/aste_270x450x180/osses
+    grid_dir:  ...
+    cache_dir: ...
+  stampede3:
+    detect: {hostname: ["*.stampede3.tacc.utexas.edu"]}
+    run_root:  /scratch/08381/goldberg/aste_270x450x180/osses   # purgeable, Tier 1 only
+    grid_dir:  /work2/08381/goldberg/ls6/aste_270x450x180/GRID_noblank_real4
+    cache_dir: /work2/08381/goldberg/ls6/smartosse/smartosse/figures/data
+  docker:
+    cache_dir: /data          # note: no run_root at all
+```
+
+Design rules that matter:
+
+- **Detect by hostname, but `SMARTOSSE_SITE` and `SMARTOSSE_*_DIR` env vars always win.**
+  Detection is a convenience, never the only way in — otherwise a new machine is a code change.
+- **`run_root` must be allowed to be absent.** The `docker` site above has no run_root, and
+  that is the point: it is what lets a stranger regenerate figures with no model data. Any
+  code that assumes run_root exists is code that cannot run at Tier 0.
+- **Make the missing-path error the documentation.** "`run_root` is not configured for site
+  `docker`; this figure needs Tier 1 inputs (see docs/reproducibility.md). Tier 0 figures
+  work from the cache — run `make figures`." That error message is read more often than
+  the README.
+- Add a `sites.yml` entry for a generic `laptop`/`local` site so contributors have an
+  obvious template, and keep the file free of anything user-specific beyond your own entry.
+
+### Job scripts
+
+- [ ] Pull the current job scripts from pfe into `model/jobs/` (§5b) verbatim, plus a note
+      saying which scheduler and queue they target. They encode node counts, wall times, and
+      the tile decomposition that has to match `SIZE.h` / `data.exch2` — that is provenance,
+      not boilerplate, and it is the part nobody can reconstruct from the paper.
+- [ ] While on pfe, inventory what else exists *only* there: the nature-run extraction
+      pipeline, the llc4320 handling, and the `optim` driver settings are the likely ones.
 
 ---
 
@@ -390,9 +499,12 @@ The dependency structure matters more than the numbering above:
 
 0. ~~**Tag `v1.0-paper-submitted`.**~~ ✅ done (`1a7a1b4`, tagged locally, not yet pushed).
 1. ~~**§2 — fix the two failing tests.**~~ ✅ done (`49cd5a5`, 2 passed). Prints and CI still open.
-2. **§5b — get the namelists and code mods off `/scratch`.** Promoted to the top: it is
-   ~550 KB, it is what the paper already promises, and it is the only item here with a
-   deadline imposed by someone else's purge policy.
+2. **§5b — get the namelists and code mods off `/scratch` onto `/work2`.** It is ~550 KB,
+   it is what the paper already promises, and `/work2` (Stockyard) is not purged. The only
+   item here with a deadline imposed by someone else's policy.
+2b. **§4b — decouple the imports** (`__init__.py`, `ecco_v4_py`, `asteoptim`), then build the
+   extraction-only env on pfe. Unblocks running `gen_*` next to the data, which retires the
+   purge problem permanently rather than managing it.
 3. **§1 — hygiene and triage.** Mostly deletion and `git add`. Makes everything after easier
    to reason about.
 4. **§3/§4 — env + paths.** Unblocks Docker and Tier 0.
