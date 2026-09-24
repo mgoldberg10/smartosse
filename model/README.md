@@ -55,39 +55,41 @@ remaining script uses the same tile decomposition — check each before assuming
 
 ## `optim/`
 
-The ECCO `optim` driver *configuration* for each experiment family's adjoint iterations —
-`data.optim` (m1qn3 solver settings: `numiter`, `nupdate`, `coldstart`, …), `data.ctrl` (ECCO
-control-vector naming convention, identical across families), `reset.bash`, and `Makefile`
-(where present) for `optim.x`. Directory names map to the pfe source as:
+This is **ECCO's `optim_m1qn3`** — the off-line large-scale optimization driver that wraps the
+M1QN3 quasi-Newton solver (see the `Makefile`'s own header: "Makefile for the off-line large
+scale optimization with m1qn3") and steps the adjoint iterations between MITgcm forward/adjoint
+runs, reading/writing `ecco_ctrl_MIT_CE_000.optNNNN` control vectors. Not to be confused with
+`smartuq`'s unrelated `omp`/greedy sensor-selection optimization, or with MITgcm's own `data.ctrl`
+namelist (same filename, different file — see `namelists/` above).
 
-| here | pfe (`osses/`) |
-|---|---|
-| `base/` | `OPTIM/` |
-| `daily/` | `OPTIM_daily/` |
-| `daily_coldstarttrue/` | `OPTIM_daily_coldstarttrue/` |
-| `debug/` | `OPTIM_DEBUG/` |
-| `fullyear/` | `OPTIM_fullyear/` |
-| `subgyre/` | `OPTIM_subgyre/` |
+**Down to a single template**, 2026-09-24 (Matt's call): pfe had six near-identical `OPTIM*/`
+directories, one per experiment family (`OPTIM`, `OPTIM_daily`, `OPTIM_daily_coldstarttrue`,
+`OPTIM_DEBUG`, `OPTIM_fullyear`, `OPTIM_subgyre`). Checked byte-for-byte: `data.ctrl`,
+`reset.bash`, and `Makefile` were **identical across all six** (same md5sum). `data.optim` only
+ever differed in `optimcycle` (which iteration) and `fmin` (that iteration's cost value) — and
+every kept `jobs/` script *regenerates* `data.optim` itself at each iteration via a `mv data.optim
+data.optim_bk; cat > data.optim <<EOF ... EOF` heredoc with `numiter=10, nupdate=4` hardcoded and
+`coldstart` substituted from a shell variable — so the per-family copies weren't six different
+configurations, they were six stale snapshots of a template already fully visible in `jobs/`.
+One `data.optim` kept here as an illustrative rendered example (from the old `OPTIM/` family);
+its `fmin`/`optimcycle` values are specific to that snapshot and not meaningful on their own —
+read the heredoc in `jobs/` for what actually varies.
 
-**Deliberately excluded**, two categories:
+**Deliberately excluded**, same reasoning as before (pruned within each family before the
+single-template consolidation):
 
-1. *Too big to commit*: the per-iteration state binaries that live alongside this config on
+1. *Too big to commit*: the per-iteration state binaries that lived alongside this config on
    pfe — `ecco_ctrl_MIT_CE_000.optNNNN`, `ecco_cost_MIT_CE_000.optNNNN`, `OPWARM.optNNNN`
    (hundreds of MB to 8 GB *each*) — and the compiled `optim.x`/`optim_debug.x` executables
    (rebuildable from this config + `code_froman/` with the compiler/flags in `genmake.log`, not
-   committed as binaries). Each pfe `OPTIM*/` directory is 3–70 GB in total.
-2. *Run-instance operational artifacts, not configuration* (pruned 2026-09-24, Matt's call):
-   `costfunctionNNNN` (one iteration's cost value), `m1qn3_output.txt`/`optim.out`/
-   `optim_c68v.out`/`output_optim_itNNNN.txt`/`stdout` (solver/run logs), `data.optim_bk` (a
-   stray backup of `data.optim`), and the small `OPWARM.optNNNN` stub files that happened to be
-   under the 1 MB filter in a few families — these document *that a particular run happened*,
-   not *how the optim driver is configured*, so they're not useful to a reader trying to
-   understand or reproduce the setup. Still in git history if ever wanted back.
+   committed as binaries). Each pfe `OPTIM*/` directory was 3–70 GB in total.
+2. *Run-instance operational artifacts, not configuration*: `costfunctionNNNN`,
+   `m1qn3_output.txt`/`optim.out`/`optim_c68v.out`/`output_optim_itNNNN.txt`/`stdout` (solver/run
+   logs), `data.optim_bk`, and small `OPWARM.optNNNN` stubs. `OPTIM/goldberg_optim_memory_error/`
+   (a nested debug-incident copy of several of the same filenames) was also left out.
 
-What's here now is genuinely just the driver config — a few KB per family.
-
-`OPTIM/goldberg_optim_memory_error/` (a nested debug-incident copy of several of the same
-filenames) was left out — redundant with `base/` and not itself provenance for a paper run.
+All of the above still recoverable from git history (`2b94375`, the per-family pruning commit;
+this commit, the consolidation) or the pfe source tree if ever wanted back.
 
 ## `code/froman/`
 
