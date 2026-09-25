@@ -8,10 +8,9 @@ each for V_bt and ~30 s each for p_b, so ~12 min for the full 2 runs x 4 cables
 x 2 fields sweep. This script does that once and writes the result to
 ``figures/data/appendixB_skill_maps.nc``; the figure module only reads the cache.
 
-Run as (texlive not needed -- no plotting here):
+Run as (texlive not needed -- no plotting here; on any configured site -- see
+smartosse/paths.py and config/sites.yml):
 
-    conda activate /work2/08381/goldberg/ls6/miniforge3/envs/esmpy_3.10
-    cd /work2/08381/goldberg/ls6/smartosse
     python -m smartosse.figures.gen_appendixB_skill_cache
 
 Pass ``--regions labsea northsea`` to redo a subset (the cache is merged with
@@ -50,6 +49,7 @@ import xarray as xr
 
 from ..utils import read_aste_bin
 from ..osse import NatureRun, ForecastModel, OSSE, _compute_skill
+from ..paths import run_root
 
 # Duplicated from fig9_patm_unc.py rather than imported: that module is a
 # plotting module (matplotlib/cartopy at module level), and this script is
@@ -59,11 +59,14 @@ from ..osse import NatureRun, ForecastModel, OSSE, _compute_skill
 # either changes.
 REGIONS = ['labsea', 'subgyre', 'northsea', 'newfoundland']
 EXT = '_daytoday'
-RUN_DIR_ROOT_STD = f'/scratch/08381/goldberg/aste_270x450x180/osses/runc68v_froman_partialcables_jrastd{EXT}/201201/'
-RUN_DIR_ROOT_SPREAD = '/scratch/08381/goldberg/aste_270x450x180/osses/runc68v_froman_partialcables_jraspread/201201/'
+RUN_DIR_ROOT_STD = os.path.join(run_root(), f'runc68v_froman_partialcables_jrastd{EXT}', '201201') + '/'
+RUN_DIR_ROOT_SPREAD = os.path.join(run_root(), 'runc68v_froman_partialcables_jraspread', '201201') + '/'
 
-# The barotropic-velocity nature run (ASTE-tiled U_bt.nc/V_bt.nc). NatureRun's
-# own default nr_dir is the phibot_daily directory, which has no *_bt.nc.
+# The barotropic-velocity nature run (ASTE-tiled U_bt.nc/V_bt.nc). Still
+# TACC-only and hardcoded -- the nature-run pipeline hasn't been located on
+# pfe yet (deferred, see docs/pfe-brief.md). NatureRun's own default nr_dir
+# (smartosse.paths.nr_dir(), also TACC-only for now) is the phibot_daily
+# directory, which has no *_bt.nc, hence this separate constant.
 NR_BT_DIR = '/work2/08381/goldberg/ls6/aste_270x450x180/NR_baro_vel/'
 
 DATA_DIR = os.path.join(os.path.dirname(__file__), 'data')

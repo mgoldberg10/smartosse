@@ -173,6 +173,46 @@ base+delta pattern where more than one variant exists:
 
 `model/namelists/` is 2.0 MB total across all 7 run families.
 
+## First real end-to-end smoke test, 2026-09-24: `gen_gate_caches.py` on pfe
+
+Matt's stated bar for "the package is ready": load real data and regenerate a real
+cache, on pfe, using what's in this repo. First attempt, `python -m
+smartosse.figures.gen_gate_caches jraspread` against the real
+`partialcables_jraspread/201201/labsea/` data (using `smartosse.paths` for
+`RUN_DIR`/`GRID_DIR` for the first time — see below) — found and fixed three real
+bugs, all xgcm API drift (this repo's xgcm pin predates 0.8; the installed
+`environment-extract.yml` version is 0.10.1):
+
+- `smartosse/llc_grid.py`: `xgcm.Grid(..., periodic=False)` → removed, needs
+  `padding='fill'`; `grid.interp_2d_vector(..., boundary='fill')` → renamed,
+  needs `padding='fill'`.
+- `smartosse/osse.py` (`ForecastModel._load_fm_fwflx`) and
+  `smartosse/figures/gen_gate_caches.py` (`advfw_staggered`): same rename,
+  `grid.interp(..., boundary='extend')` → `padding='extend'`.
+
+Also fixed as part of the same pass: `gen_gate_caches.py`'s `RUN_DIR`/`GRID_DIR`
+and `gen_appendixB_skill_cache.py`'s `RUN_DIR_ROOT_{STD,SPREAD}` now resolve via
+`smartosse.paths` (`run_root()`/`grid_dir()`) instead of hardcoded
+`/scratch/08381/.../work/08381/...` TACC paths — the first real use of the §4
+resolver outside its own tests. Confirmed `paths.grid_dir()`'s pfe guess
+(`GRID_froman/`, flagged uncertain when written) is in fact correct: it loads
+and produces the expected 270×270×50×6-tile ASTE dims. `NR_BT_DIR` (nature run,
+`gen_appendixB_skill_cache.py`) is still hardcoded/TACC-only — deferred with the
+rest of the nature-run work.
+
+**With all of that fixed, the run got substantially further** — grid load (0.9s),
+opened real `trsp_3d_set1`/`state_3d_set1` binaries (12.9s), computed the first
+iteration's `ADV_fw` — before being **OOM-killed by the login node's per-session
+memory cgroup** at ~4.8 GB RSS partway through the second iteration (confirmed via
+`dmesg`: `oom-kill:constraint=CONSTRAINT_MEMCG ... Killed process ... (python)`).
+This is not a code bug — the same computation is what every `model/jobs/` PBS
+script already requests real compute-node resources for (`select=15:ncpus=40`,
+etc.); running it interactively on a pfe login node (`pfe20`) hits that node's own
+resource policy, not a package limitation. Not yet re-attempted through an actual
+PBS job/interactive compute allocation — that's the natural next step toward the
+full regenerate-caches-and-replot bar, but submitting one wasn't done unprompted
+since it spends real queue allocation.
+
 ## Still needed (not done yet)
 
 - The build recipe is only partially captured: compiler (`ifort 19.1.3.304`) and MPI (HPE MPT

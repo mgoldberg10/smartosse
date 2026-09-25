@@ -10,9 +10,16 @@ numpy, future -- see ``environment-extract.yml``), so vendoring them removes
 the single heaviest, hardest-to-install dependency from that path. See
 ROADMAP.md §4b.
 
-Copied verbatim (only the trailing whitespace/formatting untouched) from
-``ecco_v4_py`` 1.6.0's ``ecco_utils.py`` (``get_llc_grid``) and
-``vector_calc.py`` (``UEVNfromUXVY``).
+Copied from ``ecco_v4_py`` 1.6.0's ``ecco_utils.py`` (``get_llc_grid``) and
+``vector_calc.py`` (``UEVNfromUXVY``), with deliberate deviations for xgcm
+>=0.8's renamed kwargs (found and fixed 2026-09-24 by actually running this
+against real grid data on pfe with xgcm 0.10.1, not just imported -- same
+behavior, current API):
+
+- ``xgcm.Grid(..., padding='fill')`` instead of the removed ``periodic=False``
+  (``ValueError: The periodic argument has been removed``).
+- ``grid.interp_2d_vector(..., padding='fill')`` instead of ``boundary='fill'``
+  (``ValueError: Argument 'boundary' has been renamed to 'padding'``).
 
 Source: https://github.com/ECCO-GROUP/ECCOv4-py
 License: MIT (Copyright 2018 Ian Fenty), reproduced below per its terms.
@@ -93,7 +100,7 @@ def get_llc_grid(ds, domain='global'):
         }}
 
         grid = xgcm.Grid(ds,
-                periodic=False,
+                padding='fill',
                 face_connections=tile_connections
         )
     elif domain == 'aste':
@@ -111,7 +118,7 @@ def get_llc_grid(ds, domain='global'):
                     5:{'X':((4,'X',False),None),
                        'Y':(None,(0,'X',False))}
                    }}
-        grid = xgcm.Grid(ds,periodic=False,face_connections=tile_connections)
+        grid = xgcm.Grid(ds, padding='fill', face_connections=tile_connections)
     else:
         raise TypeError(f'Domain {domain} not recognized')
 
@@ -153,7 +160,7 @@ def UEVNfromUXVY(xfld, yfld, coords, grid=None):
         grid = get_llc_grid(coords)
 
     # First, interpolate velocity fields from cell edges to cell centers
-    velc = grid.interp_2d_vector({'X': xfld, 'Y': yfld},boundary='fill')
+    velc = grid.interp_2d_vector({'X': xfld, 'Y': yfld}, padding='fill')
 
     # Compute UE VN using cos(), sin()
     u_east = velc['X']*coords['CS'] - velc['Y']*coords['SN']

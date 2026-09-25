@@ -259,8 +259,8 @@ class ForecastModel:
         self.ds_state['time'] = self.datetimes
 
         grid_aste = get_llc_grid(self.ds_trsp, domain='aste')
-        S_at_u = grid_aste.interp(self.ds_state.SALT, 'X', boundary='extend')
-        S_at_v = grid_aste.interp(self.ds_state.SALT, 'Y', boundary='extend')
+        S_at_u = grid_aste.interp(self.ds_state.SALT, 'X', padding='extend')
+        S_at_v = grid_aste.interp(self.ds_state.SALT, 'Y', padding='extend')
 
         print('Computing ADVx_FW')
         self.ADVx_FW = (self.ds_trsp.UVELMASS * self.ds_trsp.dyG * self.ds_trsp.drF * (Sref - S_at_u)/Sref ).sum('k').compute()

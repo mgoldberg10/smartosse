@@ -27,9 +27,10 @@ that needs them is computed here once and cached:
 Naming: ``v{X}s{Y}`` = velocity from iteration index X, salinity from index Y,
 with 0 = FM (iter0000, first guess) and 1 = OSSE (iter0020, assimilated).
 
-Run:
-  PY=/work2/08381/goldberg/ls6/miniforge3/envs/esmpy_3.10/bin/python
-  $PY gen_gate_caches.py [run_tag]        # default run_tag: jraspread
+Run (on any configured site -- see smartosse/paths.py and config/sites.yml;
+run e.g. `SMARTOSSE_SITE=pfe` or export SMARTOSSE_RUN_ROOT/SMARTOSSE_GRID_DIR
+directly to override):
+  python -m smartosse.figures.gen_gate_caches [run_tag]   # default run_tag: jraspread
 """
 import os
 import sys
@@ -42,6 +43,7 @@ import pandas as pd
 
 from ..llc_grid import get_llc_grid, UEVNfromUXVY
 from ..dataset import open_astedataset, open_asteoptimdataset
+from ..paths import run_root, grid_dir
 
 warnings.filterwarnings("ignore")
 
@@ -49,9 +51,9 @@ warnings.filterwarnings("ignore")
 # Config -- kept deliberately identical to davis_strait_fw_decomposition.py
 # --------------------------------------------------------------------------- #
 RUN_TAG = sys.argv[1] if len(sys.argv) > 1 else "jraspread"
-RUN_DIR = ("/scratch/08381/goldberg/aste_270x450x180/osses/"
-           f"runc68v_froman_partialcables_{RUN_TAG}/201201/labsea/")
-GRID_DIR = "/work/08381/goldberg/ls6/aste_270x450x180/GRID_noblank_real4/"
+RUN_DIR = os.path.join(run_root(),
+                        f"runc68v_froman_partialcables_{RUN_TAG}", "201201", "labsea") + "/"
+GRID_DIR = grid_dir() + "/"
 
 SREF = 34.8  # reference salinity used to build ADV_fw (matches NR construction)
 ITERS = [0, 20]  # iter0000 = FM (first guess), iter0020 = OSSE (assimilated)
@@ -106,8 +108,8 @@ def advfw_staggered(trsp, salt):
     salinity is interpolated onto the velocity faces before the (Sref - S)/Sref
     weighting, and the vertical sum is over the full column.
     """
-    s_u = GRID_OBJ.interp(_bare(salt), "X", boundary="extend")
-    s_v = GRID_OBJ.interp(_bare(salt), "Y", boundary="extend")
+    s_u = GRID_OBJ.interp(_bare(salt), "X", padding="extend")
+    s_v = GRID_OBJ.interp(_bare(salt), "Y", padding="extend")
     advx = (trsp.UVELMASS * trsp.dyG * trsp.drF * (SREF - s_u) / SREF).sum("k")
     advy = (trsp.VVELMASS * trsp.dxG * trsp.drF * (SREF - s_v) / SREF).sum("k")
     return advx.compute(), advy.compute()
