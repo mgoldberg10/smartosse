@@ -15,56 +15,193 @@ These two goals conflict less than they appear. The thing that satisfies both is
 
 ---
 
-## Handoff, 2026-09-24 (pfe session) — start here
+## Handoff, 2026-09-24 (pfe session, evening) — start here
 
-**Uncommitted state:** local branch `figures-pfe-portability` on pfe (`pfe20`,
-`/nobackupp27/mgoldbe1/smartosse`), 2 commits ahead of `main`, **not pushed**. Contains a
-namelist-rescue correction and the first real pfe-portability + xgcm-compat fixes (see
-below). Push it, open a PR, merge, then `git pull` on whatever machine picks this up next
-— same flow as the two PRs already merged this session (`pfe-environment-extract`,
-`packaging-paths`).
+**State:** branch `figures-pfe-portability` on pfe, 3 commits ahead of `main`, plus a large
+uncommitted working tree that **Matt is committing himself** as of this handoff. Tests: **22
+passed**. Nothing pushed.
 
-**Matt's stated bar for "the package is ready"**: load real data and regenerate a figure
-cache *on pfe*, using only what's in this repo. First real attempt this session
-(`python -m smartosse.figures.gen_gate_caches jraspread`) got substantially further than
-expected — real grid load, real 3D binary I/O, one full iteration's computation — before
-being **OOM-killed by the pfe login node's memory cgroup** partway through the second
-iteration (confirmed via `dmesg`, not a guess). That is not a code bug; it is that this
-workload needs a real compute-node allocation, same as every script in `model/jobs/`
-already requests via PBS. **The concrete next step is re-running that same command through
-an actual PBS job or interactive allocation** (`qsub -I ...`, then `export
-PATH=/home3/mgoldbe1/envs/extract/bin:$PATH` and rerun) rather than on a login node. Not
-done this session on purpose — submitting a job spends real queue allocation, so it wasn't
-done unprompted.
+### ✅ Tier 1 is real now: two caches regenerated on pfe from source
 
-**Other loose ends found this session, not yet acted on:**
+The earlier bar ("load real data and regenerate a figure cache on pfe using only this repo")
+is met, and then extended:
 
-- Two more `gen_*.py` cache builders still hardcode TACC-only paths that were out of scope
-  for this pass: `gen_patm_uncertainty_fields.py` (`JRA55_DIR`, `JRA3Q_DIR`, `ERA5_DIR` —
-  raw atmospheric reanalysis archives, not model run output, no known pfe location yet) and
-  `gen_patm_daytoday_weight_Pa.py` (`WEIGHT_DIR`). `gen_appendixB_skill_cache.py`'s
-  `NR_BT_DIR` (nature run) is the same story. None of these block `gen_gate_caches.py`.
-- Swept the rest of the repo for the same xgcm `boundary=`/`periodic=` API drift that hit
-  `gen_gate_caches.py` (fixed in `smartosse/llc_grid.py`, `smartosse/osse.py`,
-  `smartosse/figures/gen_gate_caches.py` — xgcm's `Grid(periodic=...)` was removed and
-  `.interp(boundary=...)` renamed to `padding=` somewhere between whatever xgcm version this
-  repo was written against and 0.10.1, the version `environment-extract.yml` installs).
-  Found no other xgcm-specific call sites; the three `.interp(...)` hits elsewhere
-  (`fig10_patm_mechanism.py`, `gen_patm_uncertainty_fields.py`) are plain `xarray.interp`,
-  unaffected. Worth a similar live-run check on the *other* five `gen_*.py`/`osse.py` paths
-  before assuming they're all clean, though — this was only found by actually running one.
-- `config/sites.yml`'s `pfe` site's `grid_dir` (`GRID_froman/`) was a flagged-uncertain guess
-  as of last session; now confirmed correct by the smoke test above (updated the comment in
-  place). The `run_root`/`cache_dir` entries for `pfe` remain as documented.
+1. **`gen_gate_caches jraspread`** — PBS job **25186085** on `r141i0n26`, exit 0, wall
+   15:44, CPU 23:50, peak RSS 5.2 GB, ~31 GB read. All four Davis-Strait caches written and
+   verified against the module docstring. `osse.py:229/:236` confirmed to consume the run-dir
+   cache (`ADVe_FW`/`ADVn_FW` present), so backward compatibility holds.
+2. **`gen_appendixB_skill_cache`** — job **25186644**, `devel`, submitted and running at
+   handoff time. Builds `appendixB_skill_maps.nc`. All 4 regions resolve in both run roots on
+   pfe (better than the docstring's note that `subgyre` was missing at TACC).
+3. **`gen_patm_uncertainty_fields --fields std daytoday`** — job **25186657**, ✅ **exit 0,
+   12 s**, both files written (its predecessor 25186653 died on the pandas drift below).
 
-**Where this leaves the roadmap's "Suggested order" below**: §5b, §4b, §1 (partially), §3,
-§4 are done (see their sections for what "partially" means for §1). §5c and the rest of §1
-need a **TACC session**, not pfe — most of the ~55 untracked per-figure modules, the stray
-PNGs, and the untracked core modules (`curl.py`, `plot_new.py`, etc.) only exist there
-(verified absent on pfe, twice now, across two sessions). §5 (figure manifest + driver) was
-recommended as next-after-§4 but not started; it doesn't strictly need §5c first and could
-reasonably be done from pfe against the current (partial) figure set if a TACC session isn't
-available. Nature-run/llc4320: still deferred, needs Matt's manual intervention.
+   **Validation against the stats recorded in `gen_patm_daytoday_weight_Pa`'s docstring —
+   one field confirms, the other does NOT:**
+
+   | field | computed here | recorded target | verdict |
+   |---|---|---|---|
+   | `sigma_patm_std_2012.nc` (sub-daily) | mean **163.98 Pa** | "`w^-1/2` mean = 164 Pa for `wApressure_ASTE270_EXFpress_std_new.bin`" | ✅ **matches to 3 figures** |
+   | `sigma_patm_std_2012_daytoday.nc` | min 0.68, med 7.91, mean **7.26**, max 15.95 hPa | min 0.462, med 5.03, mean **5.84**, max 21.96 hPa | ❌ **~24% high, max low** |
+
+   So `compute_sigma_std` is independently confirmed to reproduce the EXFpress prior. But the
+   **day-to-day definition is not yet right.** I implemented it as Matt specified — daily
+   means, then std over days — and the two statistics do differ sensibly (day-to-day is 4.4x
+   sub-daily, which is physically correct for synoptic pressure). It just does not reproduce
+   the TACC artifact.
+
+   Leading candidate for the real definition: std of **consecutive-day differences**,
+   `daily_mean.diff('time').std('time')`. The ratio recorded/computed is 5.84/7.26 = 0.80,
+   which is the right ballpark for the diff-std of a red-noise series versus the series' own
+   std. **Do not ship `sigma_patm_std_2012_daytoday.nc` as regenerated until this is settled**
+   — `compute_sigma_std_daytoday` is additive and easy to amend (one line), and the recorded
+   four-number target above is a cheap pass/fail test. The file currently on disk is the
+   daily-means-then-std version.
+
+**Both jobs were still in flight when this was written. Verify before trusting:**
+```
+qstat -u mgoldbe1
+tail -40 jobs/logs/gen_appendixB_skill_cache_25186644.log
+tail -40 jobs/logs/gen_patm_uncertainty_fields_25186657.log
+ls -l smartosse/figures/data/*.nc
+```
+
+### 🔑 The nature run is located on pfe (Matt, this session)
+
+`/nobackupp27/mgoldbe1/llc_4320/aste/` — three separate products, now three `sites.yml` keys
+with resolvers in `smartosse/paths.py` (`nr_dir`, `nr_bt_dir`, `nr_fwflux_dir`). Each was
+verified by opening the files and checking the variable names `osse.py`'s loaders ask for:
+
+| key | path (under that tree) | contents | verified |
+|---|---|---|---|
+| `nr_dir` | `global_bp/hourly/postprocess` | `PhiBot`, faces 00-12, t0/t1 | hourly 2011-09-13 .. **2012-11-15** |
+| `nr_bt_dir` | `barotropic_velocity/201201` | `U_bt`, `V_bt` | daily Jan 2012, ASTE-tiled (tile=6) |
+| `nr_fwflux_dir` | `fwflux` | `ADVe_FW`, `ADVn_FW` | daily Jan 2012, tile=13 (loader isels aste_tiles) |
+
+Matt's note: *"you can see how poorly these are organized. I will work that out later."* The
+`sites.yml` keys mean the repo no longer cares how they are arranged — only that the three
+paths resolve. **If the tree is reorganized, update those three keys and nothing else.**
+
+⚠️ **The bp archive stops 2012-11-15, so it does not cover a full 2012.** fig8's default
+`complete_months_only=True` (Jan-Oct) sits inside that; `--all-months` does not.
+
+### 🐛 pandas 3.0 API drift — a second instance of the xgcm lesson
+
+Job 25186653 died with `ValueError: Invalid frequency: 3H ... Did you mean h?`. pandas 2.2
+deprecated uppercase `H`, and **pandas 3.0 removed it**; `environment-extract.yml` pins
+pandas 3.0.6. Swept and fixed repo-wide:
+
+- `smartosse/patm.py` — 4 sites, `"3H"/"1H"/"6H"/"H"` → lowercase `h`. This is what broke the job.
+- `smartosse/figures/fig8_smart_grace_mo_skill.py` — 7 sites, month-end `'M'`/`'1M'` → `'ME'`/`'1ME'`
+  (a pure rename in pandas 2.2, removed as `M` in 3.0). **fig8's cache build would have hit
+  this next** — it was fixed before being run, i.e. by inspection, not by a live run.
+- `smartosse/figures/gen_patm_uncertainty_fields.py` — `'1d'` → `'1D'` (lowercase `d` now
+  raises `Pandas4Warning`; not yet fatal, fixed while in the area).
+
+Every remaining literal was checked against `pd.tseries.frequencies.to_offset` under 3.0.6.
+
+⚠️ **One dynamic case left, deliberately not touched:** `osse.py:109`
+`self.freq_str = self.ecco_frequency[0]`, used at `:315`/`:323` as
+`resample(time=f'1{self.fm.freq_str}')`. If a run's `data.ecco` yields `H` or `M`, that
+breaks the same way. It reads `D` for the runs exercised so far. Fixing it means normalising
+the alias at the point of use, which is a behaviour change — left for a decision.
+
+**The generalisable lesson, now twice over:** this class of bug is invisible to inspection and
+to the test suite, and only a live run finds it. The roadmap's standing item — "check the
+other five `gen_*.py`/`osse.py` paths for the same drift" — should be read as *run them*, not
+*read them*.
+
+### ✅ fig1 is Tier 0; Tier 0 is 8/10
+
+All six of fig1's input CSVs (~98 KB) are vendored into `smartosse/figures/cable_data/`
+(+ `partial_cable_coords/`), declared as `package-data`, both loaders verified against shipped
+data alone (3494 + 91 rows; 157 sensors across 4 regions). Manifest now reads
+`{tier 0: 9 entries, tier 2: 2}` with no tier 1 left.
+
+⚠️ **The trap that bit twice:** `smartosse/figures/data/` is gitignored, so input files placed
+there parse locally and then silently do not ship. Matt initially dropped the SPNA coords
+there; they were moved to `cable_data/`. `tests/test_required_files_are_not_gitignored` now
+fails if any manifest-listed input lands under an ignored path.
+
+### Where each of the 8 Tier-0 caches stands
+
+| cache | on pfe? | blocker |
+|---|---|---|
+| `appendixB_skill_maps.nc` | ✅ building | job 25186644 — verify |
+| `sigma_patm_std_2012_daytoday.nc` | ⚠️ built, **definition unvalidated** | see the validation table above |
+| `fig5_misfit_rmse_skill.nc` | data ✅ | **plotting stack** (`cmocean`, `..plot`) |
+| `fig6_regions_skill_bp_uvbt.nc` | data ✅ | **plotting stack** |
+| `smart_grace_mo_skill.nc` | data ✅ | **plotting stack** (+ NR ends 2012-11-15) |
+| `sensor_spacing_skill.nc` | data ✅ | **plotting stack** (`cartopy`, `cmocean`) |
+| `ib_ctrl_freqs.nc` | run dir ✅ | plotting stack **+ `asteoptim` not installed** |
+| `sigma_patm_spread_2012.nc` | ❌ | **no readable ERA5 surface pressure on NAS** |
+
+**ERA5 is the only true data gap.** JRA55 (`jra55_pres_2012`, own space) and JRA3Q
+(`jra3q_pres_2012`, `atnguye4`, world-readable) are both present and now in `sites.yml`.
+`atnguye4/era5` holds only `rain` and `tmp2m_degC`; `dbwhitt/era5` is permission-denied.
+`era5_dir` is **deliberately omitted** from the pfe site so `paths.era5_dir()` raises the
+actionable error instead of silently reading nothing. `main()` is now field-selectable
+(`--fields std daytoday spread`) precisely so one missing archive doesn't block the rest.
+
+### ⏸️ OPEN DECISION — the one thing to answer first next session
+
+Four caches are blocked only by the plotting stack, not by data. Matt asked to stop and
+discuss rather than proceed. The two routes:
+
+- **(a) New plotting env** at `/home3/mgoldbe1/envs/figures` from `environment.yml`, ~2-3 GB
+  into 5.7 GB free on home3 (2.4 G of 8 G used). Touches no figure code → no manuscript risk,
+  and it is the **only** route that also enables Tier 0 *render* verification on pfe.
+  Must be installed from the login node: **compute nodes cannot reach the internet.**
+- **(b) Move plotting imports function-local** in those 5 modules — the repo's own documented
+  pattern (`environment-extract.yml` records `patm.py` already converted). Small (4-6 refs
+  each + the `..plot`/`..cmaps` imports), no disk cost, builds then run in the existing
+  extract env. But it edits figure modules while the paper is in review, which the Risks
+  section warns against, and it does not enable rendering.
+
+Recommendation on file: (a) now, (b) later as cleanup. Note that `..plot` and `..cmaps` are
+chained blockers for 4 of the 5, so (b) is slightly wider than the per-module import counts
+suggest.
+
+### Also done this session
+
+- `jobs/pfe_gen_gate_caches.pbs` and `jobs/pfe_build_cache.pbs` (generic: `qsub -v MODULE=…`,
+  optional `MARGS=…`). Both log resolved paths so a cache traces back to its inputs, and tee
+  to `jobs/logs/` on Lustre because **PBS only copies stdout back at job end**.
+  ⚠️ `qsub -v` is comma-delimited, so argument values cannot contain commas — hence
+  `--fields` accepts space-separated values.
+- §5 complete: `MANIFEST.yml`, `python -m smartosse.figures` driver (+ `smartosse-figures`
+  console script), `tests/test_manifest.py`. The driver distinguishes *missing cache* from
+  *missing dependency* from *wrong tier*, and skips with a named reason rather than half-failing.
+- `.gitignore`: `*.out` + `jobs/logs/` (PBS writes `<jobname>.out` into the repo root).
+- Machine policy in `~/.claude/CLAUDE.md` (user-level, every session on pfe): heavy work goes
+  to a compute node via PBS; Claude stays on the pfe because compute nodes are firewalled from
+  `api.anthropic.com`; the session scratchpad is login-node-local so job scripts must live on
+  Lustre. Carries the measured calibration numbers.
+- Incidental fixes: `osse.py` NR paths use `os.path.join` (string `+` meant a `nr_dir` without
+  a trailing slash globbed **nothing, silently** — and TACC's own `sites.yml` entry has no
+  trailing slash); `osse.py:122,131` invalid escape sequences (`'\psi'`, `'\eta'`) → raw strings.
+
+### Next, in order
+
+1. **Settle the day-to-day std definition** (validation table above) and rebuild — it is a
+   one-line change and a 12-second job, and right now one of the 8 caches on disk is of
+   uncertain provenance.
+2. **Answer the plotting-env decision above**, then build the 4 blocked caches via
+   `jobs/pfe_build_cache.pbs`.
+3. **Verify job 25186644** (`appendixB_skill_maps.nc`) landed — it was still running at
+   handoff. 25186657 already finished, exit 0.
+4. `pip install -e .` in the pfe env — still pending; needed for the `smartosse-figures`
+   console script and to pick up the new `package-data`. Skipped all session because an
+   editable reinstall mid-job could disturb a running job's imports.
+5. Install `asteoptim` (for `ib_ctrl_freqs`), or mark that cache copy-only.
+6. Get **ERA5 surface pressure** onto NAS, or accept `sigma_patm_spread_2012.nc` as
+   copy-from-Stampede3 and label it as such in the manifest.
+7. Decide the two untracked files (§1): `smartosse/ctrl_utils.py` (orphan, unimportable) and
+   the empty `Untitled.ipynb`.
+8. `fig3`/`fig10` are the last two non-Tier-0 figures: give them a `build_cache`/`make_fig`
+   split, or state plainly in the README that they are Tier 2.
+9. A **TACC session** for §5c and the rest of §1 (the ~55 untracked per-figure modules, stray
+   PNGs, untracked core modules — confirmed absent from pfe a third time).
 
 ---
 
@@ -146,6 +283,18 @@ were force-added past it.
       Note `plot.py` (23 KB) and `plot_new.py` (20 KB) coexisting is a smell — resolve or rename.
       **Also not present on this pfe checkout** (same story as the figure triage above) —
       needs a TACC session.
+- [ ] **New on pfe since the last handoff — two untracked files in the working tree**
+      (`git status`, 2026-09-24). Neither is mine to decide; both need a yes/no from Matt:
+  - `smartosse/ctrl_utils.py` (211 lines). **Nothing in the repo imports it** — the one
+    apparent hit, `fig11_ib_ctrl_freqs.py:150`'s `xs.ctrl_utils.get_ctrl_relative_contributions`,
+    resolves to **asteoptim's** `ctrl_utils` (`import asteoptim as xs`, line 143), not this
+    file. So it is an orphan copy of an asteoptim module. It also opens with
+    `from smartcables import *`, and `smartcables` is **not installed** in the pfe extract
+    env and appears nowhere else in the repo — so this file cannot even be imported here.
+    Tracking it as-is would add an unimportable module and a phantom dependency. Likely a
+    local draft; **cut, or track only after the `smartcables` star-import is resolved.**
+  - `Untitled.ipynb` (72 bytes, **zero cells**) — an empty scratch notebook. Safe to delete;
+    left in place because deleting Matt's files is his call, not mine.
 - [ ] Move the eight stray PNGs out of the repo root (`i2_ocean*.png`, `inset_*.png`,
       including one with parentheses and the word "current" in the filename). **Not present
       on this pfe checkout** — needs a TACC session.
@@ -290,16 +439,70 @@ Worth doing, and it is the natural home for Tier 0.
 This is the highest-leverage engineering work in the repo, because the architecture already
 exists and just needs a name and a driver.
 
-- [ ] Write `figures/MANIFEST.yml` (or a Python dict): for each paper figure — figure number,
-      module, cache inputs, output filenames, which tier it needs. This doubles as the
-      reviewer's index and the README's figure gallery source.
-- [ ] A single driver: `make figures`, or `python -m smartosse.figures --all`, or a
-      `smartosse-figures` console script. It should render everything from cache and report
-      what it skipped and why.
-- [ ] Give the ~20 figure modules that lack `__main__` a consistent CLI, or explicitly mark
-      them library-only (`figures/__init__.py` already says modules are "meant to be imported
-      into a notebook, not run as a script" — but 29 of them now have `__main__` blocks, so
-      that docstring is stale either way).
+- [x] ~~Write `figures/MANIFEST.yml`~~ ✅ done (2026-09-24, pfe). 11 figure entries + 4
+      builders, each with module, caches, outputs, tier, and — for anything above tier 0 — a
+      `tier_blocker` saying what stops a stranger rendering it. Guarded against staleness by
+      `tests/test_manifest.py` (9 tests), which fails if a `fig*.py` or `gen_*.py` is added
+      without a manifest entry, if a tier-0 entry names no cache, or if a higher-tier entry
+      has no stated blocker.
+- [x] ~~A single driver~~ ✅ done (2026-09-24, pfe): `python -m smartosse.figures`
+      (`--list`, `--all`, `--tier N`, `--only ID`, `--check`). Defaults to tier 0, skips
+      rather than half-fails, and names the missing cache for every skip. It renders each
+      figure by running that module's own `__main__` in a subprocess — the modules already
+      have working argparse + matplotlib setup (`use_latex_times`, the indexed-PDF bitdepth
+      patch) and per-figure rcParam state does not survive being run in-process back to back.
+      **Not yet verified end to end**: see the Tier 0 caveat below.
+- [x] ~~Mark the modules that lack `__main__` library-only~~ ✅ partially done — recorded in
+      the manifest (`entrypoint: false`, `library_only: true`) and honoured by the driver,
+      which skips them with "library-only (no __main__)". On pfe this is exactly one module,
+      `fig9_patm_unc`. The claim about "~20 modules" is a TACC-side count and still needs a
+      TACC session to settle; `figures/__init__.py`'s stale docstring is still stale.
+
+**Tier 0 has never actually been executed, anywhere.** `smartosse/figures/data/` does not
+exist on pfe — the ~180 MB of caches live only at TACC — so `python -m smartosse.figures`
+here correctly skips all 11 entries with "missing cache". Every `tier: 0` in the manifest is
+read off the code path (`if args.rebuild or not exists(cache): build_cache() else: open
+cache`), not off a successful render. **Verifying Tier 0 needs one TACC session**: run the
+driver where the caches are, and record which figures actually come out. That is now a
+one-command check, which is the point of the driver.
+
+**Finding, 2026-09-24 — the hardcoded-path problem is wider than §4 recorded, and milder.**
+Wider: it is not "two more `gen_*.py`", it is **12 modules / 28 sites**, including all 9
+`fig*` render modules (`git ls-files '*.py' | xargs grep -nE "'/(work2?|scratch)"`). Milder:
+in the cached modules those constants are *default arguments to the `build_cache` branch
+only* — inert strings at tier 0 — so they do **not** block Tier 0 rendering. The ones that
+genuinely block are the three modules with no cache layer at all, which read site paths
+inside the render path: `fig1` (tier 1), `fig3` and `fig10` (tier 2). So "Tier 0 regenerates
+every paper figure" is **not true as written** — it covers 7 of 10 numbered figures.
+`fig1_global_cables` is **FIXED as of 2026-09-24** — it is now tier 0, taking Tier 0 from
+7/10 to **8/10 numbered figures**. All six input CSVs (~98 KB) are vendored into
+`smartosse/figures/cable_data/`: the two global ones from
+`/nobackup/mgoldbe1/cable_data_new/`, and the four `partial_cable_coords/` SPNA files Matt
+supplied. Both loaders verified against shipped data alone — `load_global_cables()` → 3494
+representative + 91 funded rows; `load_partial_cables()` → 157 sensors (labsea 64, subgyre 25,
+northsea 41, newfoundland 27).
+
+**The trap, twice, worth remembering:** `smartosse/figures/data/` is gitignored
+(`.gitignore:177`), so input files placed there parse fine locally and then silently do not
+ship. That is how an earlier note in this file came to claim the SPNA coords "already ship"
+when nothing in `data/` has ever been tracked. Both sets now live under `cable_data/`, are
+declared as `package-data` in `pyproject.toml`, and are guarded by
+`tests/test_required_files_are_not_gitignored` so the mistake cannot recur silently.
+
+The two remaining non-tier-0 figures are `fig3` and `fig10`, both tier 2: they read the
+nature run inside their render path and have no cache layer.
+
+- [x] ~~Ship fig1's input CSVs~~ ✅ **done — fig1 is tier 0, Tier 0 is now 8/10.** All six
+      files in `smartosse/figures/cable_data/` (+ `partial_cable_coords/`), with a README
+      recording provenance, declared as `package-data`, and both `CABLE_DATA_DIR` and
+      `PARTIAL_CABLE_DIR` now package-relative with `SMARTOSSE_*` overrides. **Note the
+      destination**: NOT `figures/data/`, which is gitignored and would have silently failed
+      to ship — see the trap note in §5.
+- [ ] Give `fig3` and `fig10` a `build_cache`/`make_fig` split, or state in the README that
+      they are Tier 2. Either is defensible; silently implying they render from cache is not.
+- [ ] Point the 7 modules that hardcode `DATA_DIR = os.path.join(os.path.dirname(__file__),
+      'data')` at `paths.cache_dir()` instead, so `SMARTOSSE_CACHE_DIR` works for figures the
+      way it already does everywhere else. §4 added the resolver; these modules bypass it.
 - [ ] **Publish the caches to Zenodo, get a DOI.** `figures/data/` is 180 MB and contains
       obvious superseded variants (`smart_grace_mo_skill_stdold.nc`,
       `..._oldgrace.nc`, `..._it4.nc` — 6.7 MB each). Trimmed, this is likely ~100 MB.
@@ -651,7 +854,9 @@ The dependency structure matters more than the numbering above:
    to reason about.
 4. **§3/§4 — env + paths.** Unblocks Docker and Tier 0.
 5. **§5c — reorganization.** After paths, before docs.
-6. **§5 — the manifest and the driver.** The real engineering.
+6. ~~**§5 — the manifest and the driver.**~~ ✅ done (2026-09-24, pfe) — `MANIFEST.yml`,
+   `python -m smartosse.figures`, and `tests/test_manifest.py`. What remains of §5 is the
+   Zenodo upload, fig1's CSVs, and a TACC session to verify Tier 0 actually renders.
 7. **§2 (rest) — logging, broader tests, green CI.**
 8. **§6/§7 — README, gallery, hero image.** Do this *last*, when the claims it makes are true.
 

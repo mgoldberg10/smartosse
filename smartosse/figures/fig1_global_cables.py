@@ -41,15 +41,29 @@ from smartosse.figures.figs_utils import latex_escape, use_latex_times, use_embe
 # =============================================================================
 
 # Global candidate + funded-system coordinates; both files carry plain
-# Longitude/Latitude columns.
-CABLE_DATA_DIR = '/work2/08381/goldberg/ls6/cable_data_new/'
+# Longitude/Latitude columns. These SHIP WITH THE PACKAGE (see
+# cable_data/README.md) -- they are figure inputs, not model output, and they
+# total ~92 KB, so Tier 0 should not need a site path for them. Copied from
+# /nobackup/mgoldbe1/cable_data_new/ on pfe, which is the same set previously
+# read from /work2/08381/goldberg/ls6/cable_data_new/ at TACC.
+# SMARTOSSE_CABLE_DATA_DIR overrides, per smartosse/paths.py's convention that
+# an env var always beats a default.
+CABLE_DATA_DIR = os.environ.get(
+    'SMARTOSSE_CABLE_DATA_DIR',
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), 'cable_data'))
 GLOBAL_CABLE_FILE_REPRESENTATIVE = 'smart_cables_may2024.csv'
 GLOBAL_CABLE_FILE_ALL = 'global_total_coord.csv'
 
 # SPNA partial-cable coordinates, one (data_variable, Longitude, Latitude)
 # csv per region. Mirrored into this package from the original OSSE run
 # directory on /scratch, which is subject to TACC's purge policy.
-PARTIAL_CABLE_DIR = os.path.join(os.path.dirname(__file__), 'data', 'partial_cable_coords')
+# These live under cable_data/, NOT under data/: data/ is gitignored (it holds
+# the large regenerable .nc caches), so coordinates placed there would never
+# ship and Fig. 1 would silently drop its inset for anyone but the author.
+PARTIAL_CABLE_DIR = os.environ.get(
+    'SMARTOSSE_PARTIAL_CABLE_DIR',
+    os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                 'cable_data', 'partial_cable_coords'))
 PARTIAL_CABLE_REGIONS = ('labsea', 'subgyre', 'northsea', 'newfoundland')
 
 # Inset legend labels: experiment code + region name (per the R1 revision plan).

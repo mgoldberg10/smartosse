@@ -14,9 +14,14 @@
 sites:
   pfe:
     # NASA Advanced Supercomputing. Confirmed: login nodes are pfeNN
-    # (this file was written from pfe20). Compute-node naming not directly
-    # observed this session -- the r*i*n* pattern is carried over from an
-    # earlier planning pass and should be verified before being relied on.
+    # (this file was written from pfe20). Compute-node naming CONFIRMED
+    # 2026-09-24: PBS job 25186085 was placed on `r141i0n26`, which the
+    # `r*i*n*` glob below matches -- so detection resolves to this site on a
+    # compute node as well as on a login node. That pattern was previously an
+    # unverified carry-over from a planning pass; it is now observed. Note the
+    # analysis job (jobs/pfe_gen_gate_caches.pbs) still exports SMARTOSSE_SITE
+    # explicitly, since an env var beating detection is the documented contract
+    # and a job should not depend on a glob.
     detect:
       hostname: ["pfe*", "r*i*n*"]
     run_root: /nobackupp27/mgoldbe1/aste_270x450x180/osses
@@ -36,8 +41,41 @@ sites:
     # Not established -- pfe-side extraction (gen_*.py) hasn't been run yet
     # (ROADMAP §4b), so there's no cache_dir convention here yet. Falls back
     # to the shipped smartosse/figures/data/ (repo-relative) if unset.
-    # Nature run location on pfe not confirmed this session (deferred, see
-    # docs/pfe-brief.md) -- no nr_dir entry.
+    #
+    # NATURE RUN, located on pfe 2026-09-24 (Matt). These are three separate
+    # products under one llc_4320/aste/ tree, not one directory -- hence three
+    # keys. Verified by opening each and checking the variable names the
+    # smartosse.osse.NatureRun loaders actually ask for:
+    #   nr_dir         -> PhiBot, face-separated (faces 00-12, t0/t1),
+    #                     hourly 2011-09-13 .. 2012-11-15 (10312 steps).
+    #                     `NatureRun(fld_type='bp')` globs '*face{NN}*' here and
+    #                     concatenates aste_tiles = [1,2,6,7,10,11].
+    #   nr_bt_dir      -> U_bt.nc / V_bt.nc, daily, 2012-01-01 .. 2012-01-31,
+    #                     already ASTE-tiled (tile=6). `fld_type='bt'`.
+    #   nr_fwflux_dir  -> ADVen_FW_sumk.nc (ADVe_FW + ADVn_FW), daily January
+    #                     2012, tile=13 (all faces; the loader isel's aste_tiles).
+    # NOTE the bp archive stops 2012-11-15, so it does NOT cover a full 2012.
+    # fig8's `complete_months_only=True` (Jan-Oct 2012) is inside that; its
+    # `--all-months` variant is not.
+    nr_dir: /nobackupp27/mgoldbe1/llc_4320/aste/global_bp/hourly/postprocess
+    nr_bt_dir: /nobackupp27/mgoldbe1/llc_4320/aste/barotropic_velocity/201201
+    nr_fwflux_dir: /nobackupp27/mgoldbe1/llc_4320/aste/fwflux
+    #
+    # Atmospheric reanalysis archives for the p_atm uncertainty fields
+    # (gen_patm_uncertainty_fields). load_forcing_generic looks for
+    # '<dataset>_<fld>_<year>' inside these, e.g. 'jra55_pres_2012'.
+    #   jra55_dir  -> jra55_pres_2012 present (2.4 GB), own space. VERIFIED.
+    #   jra3q_dir  -> jra3q_pres_2012 present (16 GB). NOTE: this is another
+    #                 user's directory (atnguye4), world-readable as of
+    #                 2026-09-24 but not under our control -- if it vanishes,
+    #                 the spread field is the only thing that breaks.
+    # DELIBERATELY ABSENT: era5_dir. There is NO ERA5 surface pressure on NAS
+    # that we can read -- atnguye4/era5 holds only rain and tmp2m_degC, and
+    # dbwhitt/era5 is permission-denied. So `sigma_patm_spread` cannot be
+    # rebuilt on pfe; omitting the key makes paths.era5_dir() raise the
+    # actionable PathNotConfiguredError instead of silently reading nothing.
+    jra55_dir: /nobackupp27/mgoldbe1/jra55
+    jra3q_dir: /nobackupp17/atnguye4/jra3q
 
   tacc:
     # TACC (Lonestar6/Stampede3), reached via the shared Stockyard

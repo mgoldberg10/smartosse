@@ -176,3 +176,8 @@ cython_debug/
 smartosse/figures/output/
 smartosse/figures/data/
 smartosse/figures/.claude/
+
+# PBS job artifacts (jobs/*.pbs itself IS tracked -- it is provenance; its output is not).
+# PBS writes <jobname>.out into $PBS_O_WORKDIR, i.e. the repo root.
+*.out
+jobs/logs/

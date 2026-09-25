@@ -58,12 +58,26 @@ import numpy as np
 import xarray as xr
 
 from ..patm import load_forcing_generic
+from ..paths import jra55_dir, jra3q_dir, era5_dir, PathNotConfiguredError
 
 OUT_DIR = os.path.join(os.path.dirname(__file__), 'data')
 
-JRA55_DIR = '/work/08381/goldberg/ls6/jra55/'
-JRA3Q_DIR = '/work/08381/goldberg/ls6/jra3q/'
-ERA5_DIR = '/work2/08381/goldberg/ls6/era5/'
+# Resolved per-site as of 2026-09-24 (env var > config/sites.yml > the historical
+# TACC path), so an unconfigured site degrades to the old behaviour instead of
+# failing at import. See smartosse/paths.py and ROADMAP.md section 4.
+# NOTE there is no readable ERA5 surface pressure on NAS, so on pfe ERA5_DIR
+# falls through to the TACC path and only the `spread` field is affected --
+# which is why `main` can now select which fields to build.
+def _resolve_or(fn, fallback):
+    try:
+        return fn()
+    except PathNotConfiguredError:
+        return fallback
+
+
+JRA55_DIR = _resolve_or(jra55_dir, '/work/08381/goldberg/ls6/jra55/')
+JRA3Q_DIR = _resolve_or(jra3q_dir, '/work/08381/goldberg/ls6/jra3q/')
+ERA5_DIR = _resolve_or(era5_dir, '/work2/08381/goldberg/ls6/era5/')
 YEAR = 2012
 
 
@@ -82,13 +96,54 @@ def compute_sigma_std(forcing_dir=JRA55_DIR, year=YEAR):
     """
     jra = load_forcing_generic(forcing_dir, year=year, fld='pres', dataset='jra55')
     jra = _dealias_lon(jra)
-    daily_std = jra.resample(time='1d').std('time')
+    daily_std = jra.resample(time='1D').std('time')
     sigma = daily_std.mean('time')
     sigma.name = 'sigma_patm_std'
     sigma.attrs.update(
         units='Pa',
         long_name='Sub-daily std of JRA55 surface pressure, time-mean over year',
         source=f'{forcing_dir} pres {year}',
+    )
+    return sigma
+
+
+def compute_sigma_std_daytoday(forcing_dir=JRA55_DIR, year=YEAR):
+    """DAY-TO-DAY std of JRA55 p_atm: daily means first, then std across days.
+
+    Distinct from `compute_sigma_std`, which is the SUB-daily std (std within
+    each day, then time-mean) -- the two answer different questions and are not
+    interchangeable. This is the field `fig9_patm_unc.SIGMA_STD_NC`
+    (``sigma_patm_std_2012_daytoday.nc``) loads, and the .nc counterpart of the
+    ``wApressure_jra2012_daytoday_std.bin`` prior used by the jrastd_daytoday
+    run; before 2026-09-24 nothing in the repo built it, so that cache could not
+    be regenerated from source at all.
+
+    ⚠️ UNVALIDATED (2026-09-24). This reproduces the definition as specified
+    (daily means, then std over days) and is sane -- 4.4x the sub-daily std,
+    correct for synoptic pressure -- but it does NOT reproduce the TACC artifact.
+    Against the four numbers recorded in gen_patm_daytoday_weight_Pa's docstring
+    for data/sigma_patm_std_2012_daytoday.nc [hPa]:
+        recorded  min 0.462  med 5.03  mean 5.84  max 21.96
+        this fn   min 0.678  med 7.91  mean 7.26  max 15.95
+    Leading candidate for the real definition is the std of CONSECUTIVE-DAY
+    DIFFERENCES, i.e. `daily_mean.diff('time').std('time')` (recorded/computed
+    mean ratio is 0.80, about right for that). By contrast `compute_sigma_std`
+    above IS confirmed: its mean of 163.98 Pa matches the 164 Pa recorded for
+    wApressure_ASTE270_EXFpress_std_new.bin. See ROADMAP.md's handoff.
+
+    Returns [lat, lon], Pa.
+    """
+    jra = load_forcing_generic(forcing_dir, year=year, fld='pres', dataset='jra55')
+    jra = _dealias_lon(jra)
+    daily_mean = jra.resample(time='1D').mean('time')
+    sigma = daily_mean.std('time')
+    sigma.name = 'sigma_patm_std'
+    sigma.attrs.update(
+        units='Pa',
+        long_name=('Day-to-day std of JRA55 surface pressure '
+                   '(daily means, then std over days)'),
+        source=f'{forcing_dir} pres {year}',
+        statistic='daytoday',
     )
     return sigma
 
@@ -125,25 +180,68 @@ def compute_sigma_spread(jra55_dir=JRA55_DIR, jra3q_dir=JRA3Q_DIR, era5_dir=ERA5
     return ev
 
 
-def main(out_dir=OUT_DIR, year=YEAR):
+ALL_FIELDS = ('std', 'daytoday', 'spread')
+
+
+def main(out_dir=OUT_DIR, year=YEAR, fields=ALL_FIELDS):
+    """Build the requested p_atm uncertainty fields.
+
+    `fields` is selectable because the three have different input requirements:
+    'std' and 'daytoday' need only JRA55, while 'spread' additionally needs
+    JRA3Q and ERA5. On a site with no readable ERA5 (pfe, 2026-09-24) the first
+    two are reproducible from source and the third is not, and one missing
+    archive should not stop the others from being built.
+    """
     os.makedirs(out_dir, exist_ok=True)
+    t_all = time.time()
+    wrote = []
 
-    t0 = time.time()
-    print('Computing sigma_patm STD field (JRA55 sub-daily std)...')
-    sigma_std = compute_sigma_std(year=year)
-    std_path = os.path.join(out_dir, f'sigma_patm_std_{year}.nc')
-    sigma_std.to_netcdf(std_path)
-    print(f'  wrote {std_path}  ({time.time() - t0:.0f}s)')
+    if 'std' in fields:
+        t = time.time()
+        print('Computing sigma_patm STD field (JRA55 sub-daily std)...', flush=True)
+        path = os.path.join(out_dir, f'sigma_patm_std_{year}.nc')
+        compute_sigma_std(year=year).to_netcdf(path)
+        print(f'  wrote {path}  ({time.time() - t:.0f}s)', flush=True)
+        wrote.append(path)
 
-    t1 = time.time()
-    print('Computing sigma_patm SPREAD field (Chaudhuri, JRA55/JRA3Q/ERA5)...')
-    sigma_spread = compute_sigma_spread(year=year)
-    spread_path = os.path.join(out_dir, f'sigma_patm_spread_{year}.nc')
-    sigma_spread.to_netcdf(spread_path)
-    print(f'  wrote {spread_path}  ({time.time() - t1:.0f}s)')
+    if 'daytoday' in fields:
+        t = time.time()
+        print('Computing sigma_patm DAY-TO-DAY STD field (JRA55)...', flush=True)
+        path = os.path.join(out_dir, f'sigma_patm_std_{year}_daytoday.nc')
+        compute_sigma_std_daytoday(year=year).to_netcdf(path)
+        print(f'  wrote {path}  ({time.time() - t:.0f}s)', flush=True)
+        wrote.append(path)
 
-    print(f'Done. Total {time.time() - t0:.0f}s.')
+    if 'spread' in fields:
+        t = time.time()
+        print('Computing sigma_patm SPREAD field (Chaudhuri, JRA55/JRA3Q/ERA5)...',
+              flush=True)
+        path = os.path.join(out_dir, f'sigma_patm_spread_{year}.nc')
+        compute_sigma_spread(year=year).to_netcdf(path)
+        print(f'  wrote {path}  ({time.time() - t:.0f}s)', flush=True)
+        wrote.append(path)
+
+    print(f'Done. {len(wrote)} file(s) in {time.time() - t_all:.0f}s.')
+    return wrote
 
 
 if __name__ == '__main__':
-    main()
+    import argparse
+
+    ap = argparse.ArgumentParser(description='p_atm uncertainty fields')
+    # nargs='+' (space-separated) as well as comma-separated: PBS `qsub -v` is
+    # itself comma-delimited, so a comma inside an argument value cannot be
+    # passed through it. Both spellings work.
+    ap.add_argument('--fields', nargs='+', default=list(ALL_FIELDS),
+                    help=f"subset of {' '.join(ALL_FIELDS)}, space- or "
+                         "comma-separated ('spread' needs JRA3Q + ERA5 too)")
+    ap.add_argument('--year', type=int, default=YEAR)
+    ap.add_argument('--out-dir', default=OUT_DIR)
+    args = ap.parse_args()
+
+    chosen = tuple(f.strip() for item in args.fields
+                   for f in str(item).split(',') if f.strip())
+    unknown = [f for f in chosen if f not in ALL_FIELDS]
+    if unknown:
+        ap.error(f"unknown field(s) {unknown}; choose from {list(ALL_FIELDS)}")
+    main(out_dir=args.out_dir, year=args.year, fields=chosen)

@@ -49,7 +49,7 @@ import xarray as xr
 
 from ..utils import read_aste_bin
 from ..osse import NatureRun, ForecastModel, OSSE, _compute_skill
-from ..paths import run_root
+from ..paths import run_root, nr_bt_dir, PathNotConfiguredError
 
 # Duplicated from fig9_patm_unc.py rather than imported: that module is a
 # plotting module (matplotlib/cartopy at module level), and this script is
@@ -62,12 +62,17 @@ EXT = '_daytoday'
 RUN_DIR_ROOT_STD = os.path.join(run_root(), f'runc68v_froman_partialcables_jrastd{EXT}', '201201') + '/'
 RUN_DIR_ROOT_SPREAD = os.path.join(run_root(), 'runc68v_froman_partialcables_jraspread', '201201') + '/'
 
-# The barotropic-velocity nature run (ASTE-tiled U_bt.nc/V_bt.nc). Still
-# TACC-only and hardcoded -- the nature-run pipeline hasn't been located on
-# pfe yet (deferred, see docs/pfe-brief.md). NatureRun's own default nr_dir
-# (smartosse.paths.nr_dir(), also TACC-only for now) is the phibot_daily
-# directory, which has no *_bt.nc, hence this separate constant.
-NR_BT_DIR = '/work2/08381/goldberg/ls6/aste_270x450x180/NR_baro_vel/'
+# The barotropic-velocity nature run (ASTE-tiled U_bt.nc/V_bt.nc). Resolved
+# per-site as of 2026-09-24 -- it was located on pfe, so this is no longer a
+# TACC-only hardcode. It stays a SEPARATE key from nr_dir because they are
+# different products: nr_dir is the face-separated bottom-pressure archive and
+# contains no *_bt.nc at all.
+# Resolution order is env var > sites.yml > the historical TACC path, so an
+# unconfigured site degrades to the old behaviour rather than crashing at import.
+try:
+    NR_BT_DIR = nr_bt_dir()
+except PathNotConfiguredError:
+    NR_BT_DIR = '/work2/08381/goldberg/ls6/aste_270x450x180/NR_baro_vel/'
 
 DATA_DIR = os.path.join(os.path.dirname(__file__), 'data')
 SKILL_CACHE = os.path.join(DATA_DIR, 'appendixB_skill_maps.nc')

@@ -1,0 +1,74 @@
+#!/bin/bash
+#PBS -N buildcache
+#PBS -o buildcache.out -j oe
+#PBS -l select=1:ncpus=40:model=sky_ele
+#PBS -l walltime=02:00:00
+#PBS -q devel
+#PBS -W group_list=s2406
+#
+# Generic Tier 1 cache builder: runs ONE smartosse.figures module on a compute
+# node. Companion to pfe_gen_gate_caches.pbs, which is specific to
+# gen_gate_caches; use this for the other builders.
+#
+# Why a batch job: see pfe_gen_gate_caches.pbs for the measured numbers and the
+# NASA HECC usage-policy rationale. Short version -- these read tens of GB and
+# run for many minutes of CPU, which is not allowed on a pfe login node. Claude
+# itself must stay on the pfe (compute nodes cannot reach api.anthropic.com), so
+# the pattern is submit-and-poll, never run-in-place.
+#
+# Usage:
+#   qsub -v MODULE=smartosse.figures.gen_appendixB_skill_cache jobs/pfe_build_cache.pbs
+#   qsub -v MODULE=...,MARGS="--regions labsea" jobs/pfe_build_cache.pbs
+#   qsub -v MODULE=...,WALL=04:00:00 -l walltime=04:00:00 -q normal jobs/...
+#
+# MODULE is required. MARGS is optional arguments passed to the module.
+
+set -o pipefail
+
+: "${MODULE:?set MODULE=smartosse.figures.<builder> via qsub -v}"
+MARGS="${MARGS:-}"
+REPO="${REPO:-/nobackupp27/mgoldbe1/smartosse}"
+ENV_BIN="${ENV_BIN:-/home3/mgoldbe1/envs/extract/bin}"
+
+cd "${PBS_O_WORKDIR:-$REPO}"
+export PATH="$ENV_BIN:$PATH"
+export SMARTOSSE_SITE=pfe          # env var beats hostname detection, by design
+
+SHORT="${MODULE##*.}"
+LOG="jobs/logs/${SHORT}_${PBS_JOBID%%.*}.log"
+mkdir -p jobs/logs
+
+echo "=================================================================="
+echo "host      : $(hostname)"
+echo "jobid     : ${PBS_JOBID:-<interactive>}"
+echo "started   : $(date)"
+echo "module    : $MODULE"
+echo "args      : ${MARGS:-<none>}"
+echo "python    : $(command -v python)"
+echo "live log  : $LOG"
+echo "------------------------------------------------------------------"
+python - <<'PYEOF'
+# Record the resolved paths in the log, so a cache can always be traced back to
+# the inputs that produced it.
+from smartosse import paths
+for key in ('run_root', 'grid_dir', 'nr_dir', 'nr_bt_dir', 'nr_fwflux_dir', 'cache_dir'):
+    fn = getattr(paths, key, None)
+    if fn is None:
+        continue
+    try:
+        print(f'  {key:15s} {fn()}')
+    except Exception as e:
+        print(f'  {key:15s} <unresolved: {type(e).__name__}>')
+PYEOF
+echo "=================================================================="
+
+# PBS only copies stdout back at job end, so tee to Lustre for live progress.
+/usr/bin/time -v python -m "$MODULE" $MARGS 2>&1 | tee "$LOG"
+rc=${PIPESTATUS[0]}
+
+echo
+echo "=================================================================="
+echo "exit code : $rc"
+echo "finished  : $(date)"
+echo "=================================================================="
+exit $rc

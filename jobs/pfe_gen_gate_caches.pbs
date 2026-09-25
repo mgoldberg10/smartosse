@@ -1,0 +1,95 @@
+#!/bin/bash
+#PBS -N gategen
+#PBS -o gategen.out -j oe
+#PBS -l select=1:ncpus=40:model=sky_ele
+#PBS -l walltime=02:00:00
+#PBS -q devel
+#PBS -W group_list=s2406
+#
+# Tier 1 (ROADMAP.md sec 0): regenerate the Davis Strait / gateway caches from raw
+# MITgcm run output, on pfe, using only what is in this repo.
+#
+# WHY THIS IS A BATCH JOB AND NOT A COMMAND YOU TYPE
+# Measured on r141i0n26, job 25186085, 2026-09-24 (exit 0):
+#   wall 15:44   CPU time 23:50 (151% of one core)   peak RSS 5.2 GB
+#   filesystem reads ~31 GB (32 records x 146 MB x {trsp,state}_3d_set1 x 2 iters,
+#   plus the grid)
+#
+# The binding constraint is CPU, not memory. 23:50 of CPU time at a sustained 151%
+# of a core is squarely what NASA HECC's automated usage-policy detector penalizes
+# on a login node -- the 2026-09-24 violation on pfe20 was triggered by a python
+# process at 105%, well below this. Peak RSS of 5.2 GB is under the nominal ~7.5 GB
+# per-user cgroup cap, which is why this got as far as the second iteration before
+# being OOM-killed on the login node rather than dying immediately: the cap is
+# shared across the whole session (the Claude process, vim, tmux all count), and a
+# `penalty1` status had already cut it to 6.0 GB. So "it fits in 7.5 GB" is not a
+# reason to run it on a pfe -- the CPU time alone is disqualifying, and the memory
+# headroom is thinner than the number suggests.
+#
+# A sky_ele node has 192 GB and 40 cores, so there is ample room; the job is
+# single-process (lightly threaded), so it is requested for one node, not for
+# parallelism.
+#
+# Usage:
+#   qsub jobs/pfe_gen_gate_caches.pbs                 # default run tag: jraspread
+#   qsub -v RUN_TAG=jrastd jobs/pfe_gen_gate_caches.pbs
+#
+# Caches are written incrementally in four stages, so a job that hits the walltime
+# still leaves the earlier stages on disk (see gen_gate_caches.py's module docstring).
+
+set -o pipefail
+
+RUN_TAG="${RUN_TAG:-jraspread}"
+REPO="${REPO:-/nobackupp27/mgoldbe1/smartosse}"
+ENV_BIN="${ENV_BIN:-/home3/mgoldbe1/envs/extract/bin}"
+
+cd "${PBS_O_WORKDIR:-$REPO}"
+
+# The extraction-only env built in ROADMAP sec 4b. Deliberately no `module purge`:
+# this matches the environment the command was already verified to start under.
+export PATH="$ENV_BIN:$PATH"
+
+# Env var beats hostname detection (smartosse/paths.py), so the run never depends
+# on whether config/sites.yml's compute-node glob happens to match this node.
+export SMARTOSSE_SITE=pfe
+
+echo "=================================================================="
+echo "host          : $(hostname)"
+echo "jobid         : ${PBS_JOBID:-<interactive>}"
+echo "started       : $(date)"
+echo "run tag       : $RUN_TAG"
+echo "repo          : $(pwd)"
+echo "python        : $(command -v python)"
+echo "=================================================================="
+
+# Verify config/sites.yml's `detect.hostname` compute-node pattern (`r*i*n*`) against
+# a real compute node. It was flagged in sites.yml as an unverified guess carried over
+# from a planning pass; this is the first job that can actually settle it. Unsetting
+# SMARTOSSE_SITE in the subshell only -- the real run above still pins the site.
+echo "--- sites.yml compute-node hostname detection ---"
+env -u SMARTOSSE_SITE python -c "
+import socket
+from smartosse.paths import detect_site
+h, s = socket.gethostname(), detect_site()
+print(f'  hostname {h!r} -> site {s!r}')
+print('  VERDICT: sites.yml pfe detect.hostname MATCHES this compute node'
+      if s == 'pfe' else
+      f'  VERDICT: sites.yml pfe detect.hostname does NOT match {h!r} -- pattern needs fixing')
+" 2>&1
+echo
+
+# PBS spools stdout on the compute node and only copies it back to $PBS_O_WORKDIR at
+# job end, so `tail`ing gategen.out from a login node shows nothing until it finishes.
+# Tee to a log on Lustre (shared, visible from the pfe) so progress can be watched live.
+LOG="jobs/logs/gategen_${RUN_TAG}_${PBS_JOBID%%.*}.log"
+mkdir -p jobs/logs
+echo "--- gen_gate_caches $RUN_TAG  (live log: $LOG) ---"
+/usr/bin/time -v python -m smartosse.figures.gen_gate_caches "$RUN_TAG" 2>&1 | tee "$LOG"
+rc=${PIPESTATUS[0]}
+
+echo
+echo "=================================================================="
+echo "exit code     : $rc"
+echo "finished      : $(date)"
+echo "=================================================================="
+exit $rc

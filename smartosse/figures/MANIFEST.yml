@@ -1,0 +1,273 @@
+# Figure manifest -- ROADMAP.md section 5.
+#
+# One entry per paper figure: which module renders it, which caches it renders
+# FROM, what it writes, and which reproducibility tier it actually needs
+# (see ROADMAP.md section 0 for the tier definitions).
+#
+# This file is the index a reviewer reads and the input the driver
+# (`python -m smartosse.figures --all`) iterates over. It is also the honest
+# answer to "what can a stranger actually regenerate?" -- which is why `tier`
+# is recorded per figure rather than claimed once in the README.
+#
+# HOW THE TIERS SHOW UP IN THE CODE
+# Every cached module follows the same shape, verified 2026-09-24:
+#     build_cache(out_path=CACHE, run_dir=<site path>, ...)   # Tier 1: reads run output
+#     make_fig(cache, ...)                                    # Tier 0: reads only the .nc
+#     __main__:  if args.rebuild or not exists(cache): build_cache() else: open(cache)
+# So the hardcoded TACC constants at the top of these modules are DEFAULT
+# ARGUMENTS to the Tier 1 branch only. They are inert strings at Tier 0 and do
+# not prevent rendering from a shipped cache. A module is Tier-0-blocked only
+# when it has no cache at all and reads site data inside its render path.
+#
+# `tier: 0` here therefore means "renders from a shipped cache with no model
+# data", NOT "verified rendered on this machine". Tier 0 has NOT been executed
+# end-to-end anywhere yet: smartosse/figures/data/ does not exist on pfe (the
+# ~180 MB of caches live only at TACC), so every tier-0 claim below is read off
+# the code path, not off a successful render. Verifying them is the Tier 0
+# driver task in ROADMAP.md section 5.
+
+meta:
+  updated: 2026-09-24
+  cache_dir: smartosse/figures/data      # overridable; see smartosse/paths.py cache_dir()
+  output_dir: smartosse/figures/output   # .png + .pdf land here
+  verified_on: pfe (login node, static source inspection only)
+  caches_present_on_this_machine: false  # figures/data/ absent on pfe -- TACC only
+
+figures:
+
+  - id: fig1
+    label: "fig:global_smart_cables"
+    title: Global SMART cable network + SPNA partial-cable inset
+    module: smartosse.figures.fig1_global_cables
+    entrypoint: true
+    caches: []                      # no .nc cache -- renders from shipped CSVs instead
+    tier: 0
+    # Non-cache files this figure needs, relative to the figures package dir.
+    # The driver checks these the same way it checks `caches`, so a cacheless
+    # tier-0 figure still gets skipped-with-a-reason instead of blindly attempted.
+    required_files:
+      - cable_data/smart_cables_may2024.csv
+      - cable_data/global_total_coord.csv
+      - cable_data/partial_cable_coords/labsea_cable_coords.csv
+      - cable_data/partial_cable_coords/subgyre_cable_coords.csv
+      - cable_data/partial_cable_coords/northsea_cable_coords.csv
+      - cable_data/partial_cable_coords/newfoundland_cable_coords.csv
+    notes: >-
+      FIXED 2026-09-24 -- was tier 1. All six input CSVs (~98 KB total) now ship
+      in cable_data/, and both loaders are verified against them off shipped data
+      alone: load_global_cables() -> 3494 representative + 91 funded rows;
+      load_partial_cables() -> 157 sensors across labsea(64) subgyre(25)
+      northsea(41) newfoundland(27). They live under cable_data/ and NOT under
+      data/, which is gitignored -- coordinates dropped into data/ would parse
+      fine locally and then silently not ship, which is how this was mis-recorded
+      as "already shipping" in the first place. Rendering still needs the
+      `plotting` extra (cartopy); that is a dependency question, not a data one.
+    outputs: [fig1_global_cables.png, fig1_global_cables.pdf]
+
+  - id: fig3
+    label: "fig:bp_std"
+    title: Synthetic OBP uncertainty map (sigma_phibot)
+    module: smartosse.figures.fig3_bp_std
+    entrypoint: true
+    caches: []
+    tier: 2
+    tier_blocker: >-
+      Renders straight off nature-run bottom pressure (BP_STD_DIR) plus a sensor
+      run directory; both hardcoded TACC, no cache layer. Needs the nature run,
+      hence Tier 2. Adding a build_cache/make_fig split here would move it to
+      tier 0.
+    inputs:
+      - BP_STD_DIR (hardcoded TACC, fig3_bp_std.py:46)
+      - SENSOR_RUN_DIR (hardcoded TACC /scratch, fig3_bp_std.py:52)
+    outputs: [fig3_bp_std.png, fig3_bp_std.pdf]
+
+  - id: fig5
+    label: "fig:fullnatl_noapress_rms_skill"
+    title: SPNA_cable misfit / RMSE / skill triptych
+    module: smartosse.figures.fig5_misfit_rmse_skill
+    entrypoint: true
+    caches: [fig5_misfit_rmse_skill.nc]
+    tier: 0
+    rebuild_tier: 1
+    rebuild_inputs: [RUN_DIR (TACC /scratch), GRID_DIR (TACC /work2)]
+    outputs: [fig5_misfit_rmse_skill.png, fig5_misfit_rmse_skill.pdf]
+    notes: "--rebuild recomputes; default path opens the cache."
+
+  - id: fig6
+    label: "fig:bp_uvbt_skill"
+    title: Partial-cable p_b and barotropic-velocity skill maps
+    module: smartosse.figures.fig6_regions_skill_bp_uvbt
+    entrypoint: true
+    caches: [fig6_regions_skill_bp_uvbt.nc]
+    tier: 0
+    rebuild_tier: 1
+    rebuild_inputs: [RUN_DIR_ROOT (TACC /scratch), NR_BT_DIR (TACC /work2), GRID_DIR (TACC /work2)]
+    outputs: [regions_skill_bp_and_uvbt_square_iter20_vmax1.png, .pdf]
+
+  - id: fig8
+    title: SMART-cable vs GRACE annual OSSE -- monthly p_b skill
+    module: smartosse.figures.fig8_smart_grace_mo_skill
+    entrypoint: true
+    caches: [smart_grace_mo_skill.nc]
+    tier: 0
+    rebuild_tier: 1
+    rebuild_inputs: [RUN_DIR_CABLE, GRACE_RUN_DIR, SENSOR_RUN_DIR (all TACC /scratch), GRID_DIR]
+    outputs: [smart_day_skill_grace_mo_skill.png, .pdf]
+    notes: >-
+      data/ holds superseded variants of this cache
+      (smart_grace_mo_skill_stdold.nc, _oldgrace.nc, _it4.nc, 6.7 MB each) --
+      drop before the Zenodo upload (ROADMAP section 5).
+
+  - id: fig9
+    title: p_atm uncertainty, adjustments, and attribution (3-panel spread rendition)
+    module: smartosse.figures.fig9_spread_3panel
+    entrypoint: true
+    caches: [sigma_patm_spread_2012.nc]
+    tier: 0
+    renders_via: smartosse.figures.fig9_patm_unc
+    outputs: [fig9_spread_3panel.png, fig9_spread_3panel.pdf]
+
+  - id: fig9_lib
+    title: Fig. 9 loaders and panel helpers (library-only)
+    module: smartosse.figures.fig9_patm_unc
+    entrypoint: false               # deliberately no __main__ -- imported by fig9/figB/fig11
+    caches: [sigma_patm_std_2012_daytoday.nc, sigma_patm_spread_2012.nc]
+    tier: 0
+    library_only: true
+    notes: >-
+      One of the modules figures/__init__.py's "imported into a notebook, not
+      run as a script" docstring is still accurate about. Most are not.
+
+  - id: fig10
+    title: p_atm mechanism (partial IB) + sea-level byproduct, 3x2
+    module: smartosse.figures.fig10_patm_mechanism
+    entrypoint: true
+    caches: []
+    tier: 2
+    tier_blocker: >-
+      Panels (e)/(f) load llc4320 eta from ETA_NR_DIR (TACC /scratch) through
+      osse.NatureRun. `--panels abcd` renders the 2x2 map panels only and skips
+      that load, but still needs a run dir + BP_SIGMA_FILE, so there is no
+      cache-only path today.
+    inputs:
+      - ETA_NR_DIR (hardcoded TACC /scratch, fig10_patm_mechanism.py:148)
+      - BP_SIGMA_FILE (hardcoded TACC /work, fig10_patm_mechanism.py:163)
+      - RUN_DIR (via RUN_DIR_ROOT_STD in fig9_patm_unc)
+    outputs: [fig10_patm_mechanism.png, fig10_patm_mechanism.pdf]
+
+  - id: fig11
+    title: Inverted-barometer control-frequency sweep
+    module: smartosse.figures.fig11_ib_ctrl_freqs
+    entrypoint: true
+    caches: [ib_ctrl_freqs.nc]
+    tier: 0
+    rebuild_tier: 1
+    rebuild_inputs:
+      - RUN_DIR_ROOT (TACC /scratch), GRID_DIR (TACC /work2)
+      - "external package: asteoptim (imported lazily as xs, only in load_relcon_sweep)"
+      - "external package: xmitgcm"
+    outputs: [inverted_barometer_ctrl_freqs.png/.pdf, inverted_barometer_ctrl_freqs_stacked.png/.pdf]
+    notes: >-
+      The only module with an explicit `use_cache and os.path.exists(cache)`
+      short-circuit. Its asteoptim/xmitgcm imports are INSIDE the rebuild
+      branch, so Tier 0 does not need either installed -- the tier split
+      working exactly as intended. Note smartosse/ctrl_utils.py (untracked, on
+      pfe) is NOT this dependency: `xs.ctrl_utils` resolves to asteoptim's.
+
+  - id: figB
+    title: "Appendix B -- day-to-day-std twin of Fig. 9 (4 panels)"
+    module: smartosse.figures.figB_patm_std_4panel
+    entrypoint: true
+    caches: [appendixB_skill_maps.nc, sigma_patm_std_2012_daytoday.nc]
+    tier: 0
+    rebuild_tier: 1
+    rebuild_via: smartosse.figures.gen_appendixB_skill_cache
+    outputs: [figB_patm_std_4panel.png, figB_patm_std_4panel.pdf]
+
+  - id: figD1
+    title: Sensor-spacing sweep -- pairwise differences of p_b skill (1x3)
+    module: smartosse.figures.figD1_sensor_spacing_skill_diff
+    entrypoint: true
+    caches: [sensor_spacing_skill.nc]
+    tier: 0
+    rebuild_tier: 1
+    rebuild_inputs: [RUN_ROOT, FIRST_GUESS_RUN_DIR (TACC /scratch), GRID_DIR (TACC /work)]
+    outputs: [sensor_spacing_pb_skill_70_140_210_diff.png, .pdf]
+    notes: >-
+      Renders whichever spacings are in the cache and leaves the rest as empty
+      decorated maps, so a partial cache still produces a figure.
+
+# ---------------------------------------------------------------------------
+# Tier 1 cache builders. These are what a Tier 1 user runs to regenerate the
+# caches above from run output. On pfe they belong in a PBS job, not on a login
+# node -- see jobs/pfe_gen_gate_caches.pbs and CLAUDE.md.
+# ---------------------------------------------------------------------------
+builders:
+
+  - module: smartosse.figures.gen_gate_caches
+    builds:
+      - "<run_dir>/advfw_fm_cache_<date>_iters0_20.nc"
+      - output/davis_strait/davis_strait_fields_cache_<tag>.nc
+      - output/davis_strait/advfw_hybrid_staggered_<tag>.nc
+      - output/davis_strait/davis_strait_section3d_cache_<tag>.nc
+    paths: portable            # resolves run_root()/grid_dir() via smartosse.paths
+    runs_on: [pfe, tacc]
+    reads: ~19 GB of raw 3-D binaries; needs a compute node (192 GB), NOT a login node
+    consumed_by: smartosse.osse
+
+  - module: smartosse.figures.gen_appendixB_skill_cache
+    builds: [appendixB_skill_maps.nc]
+    paths: portable          # run_root() + nr_bt_dir(), both resolved since 2026-09-24
+    runs_on: [pfe, tacc]
+    needs: [run_root (jrastd_daytoday + jraspread), nr_dir (bp), nr_bt_dir (U_bt/V_bt)]
+    consumed_by: [figB, fig8, figD1]     # load_bp_anom is reused by all three
+    notes: >-
+      Built on pfe 2026-09-24 via jobs/pfe_build_cache.pbs (job 25186644) once the
+      nature run was located. All four regions resolve in both run roots here.
+      NR_BT_DIR falls back to the old TACC path if a site does not configure it.
+
+  - module: smartosse.figures.gen_patm_uncertainty_fields
+    builds:
+      - sigma_patm_std_2012.nc            # --fields std       (sub-daily std)
+      - sigma_patm_std_2012_daytoday.nc   # --fields daytoday  (daily means, then std)
+      - sigma_patm_spread_2012.nc         # --fields spread    (needs all three archives)
+    paths: portable          # jra55_dir()/jra3q_dir()/era5_dir(), TACC paths as fallback
+    runs_on: [tacc]          # pfe can build std + daytoday only -- see below
+    needs: [jra55_dir (std, daytoday), "jra3q_dir + era5_dir (spread only)"]
+    consumed_by: [fig9, fig9_lib, figB]
+    notes: >-
+      `main()` takes --fields so one missing archive does not block the others:
+      on pfe JRA55 and JRA3Q are present but there is NO readable ERA5 surface
+      pressure anywhere on NAS, so `spread` is the one cache that genuinely
+      cannot be regenerated here. `compute_sigma_std_daytoday` was ADDED
+      2026-09-24 -- before that nothing in the repo built
+      sigma_patm_std_2012_daytoday.nc at all, despite fig9 loading it, so that
+      cache was unreproducible from source. It is a different statistic from
+      `compute_sigma_std` (sub-daily); the two are not interchangeable.
+
+  - module: smartosse.figures.gen_patm_daytoday_weight_Pa
+    builds: ["wApressure_*.bin (weight binary, not a .nc cache)"]
+    paths: hardcoded
+    hardcoded: [WEIGHT_DIR]
+    consumed_by: [fig10 (BP_SIGMA_FILE), fig9_lib]
+    notes: >-
+      WEIGHT_DIR's pfe counterpart probably exists
+      (aste_270x450x180/run_template/input_weight/) but was not wired up or
+      verified this session.
+
+# ---------------------------------------------------------------------------
+# Scorecard, from the entries above.
+#   tier 0 (renders from data that ships):  9 entries -- fig1 fig5 fig6 fig8 fig9
+#                                           fig9_lib fig11 figB figD1
+#                                           (8 numbered figures + 1 library module)
+#   tier 1 (needs run output):              0
+#   tier 2 (needs the nature run):          2  -- fig3 fig10
+# Tier 0 now covers 8 of the 10 numbered figures (fig1 fixed 2026-09-24 by vendoring
+# its six input CSVs into cable_data/). The two holdouts are fig3 and fig10, both of
+# which read the nature run inside their render path and have no cache layer. The
+# README must either say that plainly or those two need a build_cache/make_fig split.
+#
+# Separately: tier 0 means the DATA ships. Rendering also needs the `plotting` extra
+# (matplotlib, cartopy, ...). The driver reports that case as its own kind of skip,
+# because "no matplotlib" and "no cache" are different problems.
+# ---------------------------------------------------------------------------

@@ -72,6 +72,10 @@ def plot_jra_vs_aste_cable_variability(
 
 
 
+# NOTE: frequency aliases here are lowercase ("3h", not "3H"). pandas 2.2
+# deprecated the uppercase hour alias and pandas 3.0 REMOVED it -- with
+# pandas 3.0.6 (what environment-extract.yml pins) "3H" raises
+# ValueError: Invalid frequency: 3H ... Did you mean h?
 def load_forcing_generic(
     forcing_dir,
     year,
@@ -96,7 +100,7 @@ def load_forcing_generic(
 
     if dataset == 'jra55':
         nx, ny = 320, 640
-        freq = "3H"
+        freq = "3h"
 
         lon = np.arange(0, 0.5625 * ny, 0.5625)
         lon = (lon + 180) % 360 - 180
@@ -115,7 +119,7 @@ def load_forcing_generic(
 
     elif dataset == 'jra3q':
         nx, ny = 480, 960
-        freq = "1H"
+        freq = "1h"
 
         lon0 = 0.0
         dlon = 0.375
@@ -137,7 +141,7 @@ def load_forcing_generic(
 
     elif dataset == 'ERA5':
         nx, ny = 640, 1280
-        freq = "H"
+        freq = "h"
 
         lon0 = 0.0
         dlon = 0.28125
@@ -159,7 +163,7 @@ def load_forcing_generic(
 
     elif dataset.lower() in ['erai', 'era_interim', 'era-interim', 'eig']:
         nx, ny = 256, 512
-        freq = "6H"
+        freq = "6h"
 
         # Regular lon grid
         lon0 = 0.0

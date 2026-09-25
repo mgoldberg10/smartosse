@@ -44,5 +44,23 @@ dev = [
     "flake8",
 ]
 
+[project.scripts]
+# The figure driver (ROADMAP.md section 5). `python -m smartosse.figures` works
+# without this; the console script is just the friendlier spelling.
+smartosse-figures = "smartosse.figures.__main__:main"
+
 [tool.setuptools.packages.find]
 include = ["smartosse*"]
+
+[tool.setuptools.package-data]
+# MANIFEST.yml is data the driver reads at runtime, so it has to travel with the
+# package -- setuptools ships .py only unless told otherwise, and an installed
+# wheel without it makes `smartosse-figures` fail on a missing manifest.
+"smartosse.figures" = [
+    "MANIFEST.yml",
+    # Fig. 1's global cable coordinates -- small, static, not regenerable from
+    # anything in the repo. See smartosse/figures/cable_data/README.md.
+    "cable_data/*.csv",
+    "cable_data/partial_cable_coords/*.csv",
+    "cable_data/README.md",
+]

@@ -43,7 +43,8 @@ class NatureRun:
     def _load_nr_surf(self, varname='PhiBot'):
         nr_list = []
         for face in aste_tiles:
-            bp_face_paths = np.sort(glob.glob(self.nr_dir + f'*face{face:02d}*'))
+            bp_face_paths = np.sort(glob.glob(
+                os.path.join(self.nr_dir, f'*face{face:02d}*')))
             nr_bp = xr.open_mfdataset(bp_face_paths)
             nr_list.append(nr_bp)
         nr_bp = xr.concat(nr_list, dim='face')
@@ -53,20 +54,26 @@ class NatureRun:
         self.fld = None
 
     def _load_nr_psi(self):
-        fld = xr.open_mfdataset(self.nr_dir + self.fld_fname).psi
+        fld = xr.open_mfdataset(os.path.join(self.nr_dir, self.fld_fname)).psi
         self.fld = fld.isel(tile=aste_tiles)
         self.fld['tile'] = np.arange(len(self.fld.tile))
         self.fld_full = self.fld
 
     def _load_nr_bt(self):
-        fldU = xr.open_dataset(self.nr_dir + f'U_{self.fld_type}.nc')[f'U_{self.fld_type}']
-        fldV = xr.open_dataset(self.nr_dir + f'V_{self.fld_type}.nc')[f'V_{self.fld_type}']
+        fldU = xr.open_dataset(
+            os.path.join(self.nr_dir, f'U_{self.fld_type}.nc'))[f'U_{self.fld_type}']
+        fldV = xr.open_dataset(
+            os.path.join(self.nr_dir, f'V_{self.fld_type}.nc'))[f'V_{self.fld_type}']
         self.fldUV = [fldU, fldV]
         self.fld = self.fldUV[0]
         self.fld_full = self.fldUV[0]
 
     def _load_nr_fwflx(self):
-        fld = xr.open_mfdataset(self.nr_dir + 'ADVen_FW_sumk.nc') # includes both ADV_FW components
+        # os.path.join, not +: a nr_dir without a trailing slash would otherwise
+        # glob/open nothing at all, silently. config/sites.yml entries have no
+        # trailing slash, so this matters.
+        fld = xr.open_mfdataset(
+            os.path.join(self.nr_dir, 'ADVen_FW_sumk.nc'))  # both ADV_FW components
         self.fld = fld.isel(tile=aste_tiles)
         self.fld['tile'] = np.arange(len(self.fld.tile))
         self.fldUV = [self.fld.ADVe_FW, self.fld.ADVn_FW]
@@ -112,7 +119,7 @@ class ForecastModel:
             self.fld_type_str = 'p_b'
             self._load_fm_bp()
         elif self.fld_type == 'psi':
-            self.fld_type_str = '\psi'
+            self.fld_type_str = r'\psi'
             self._load_fm_psi()
         elif self.fld_type == 'bt':
             self.fld_type_str =  'vel_{bt}'
@@ -121,7 +128,7 @@ class ForecastModel:
             self.fld_type_str =  'ADV_{FW}'
             self._load_fm_fwflx()
         elif self.fld_type == 'eta':
-            self.fld_type_str = '\eta'
+            self.fld_type_str = r'\eta'
             self._load_fm_eta()
         else:
             raise ValueError("Unsupported field type. Choose 'bp', 'psi', 'bt', 'fwflx', or 'eta'.")

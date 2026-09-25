@@ -124,6 +124,38 @@ def nr_dir():
     return resolve('nr_dir', tier_hint='Tier 2: scoring skill against the nature run')
 
 
+def nr_bt_dir():
+    """The barotropic-velocity nature run (``U_bt.nc``/``V_bt.nc``).
+
+    Separate from `nr_dir` because they are different products in different
+    directories: `nr_dir` is the face-separated bottom-pressure archive, which
+    contains no ``*_bt.nc`` at all.
+    """
+    return resolve('nr_bt_dir',
+                   tier_hint='Tier 2: barotropic-velocity skill against the nature run')
+
+
+def nr_fwflux_dir():
+    """The freshwater-flux nature run (``ADVen_FW_sumk.nc``)."""
+    return resolve('nr_fwflux_dir',
+                   tier_hint='Tier 2: freshwater-flux skill against the nature run')
+
+
+def jra55_dir():
+    """JRA-55 forcing archive (``load_forcing_generic``'s ``forcing_dir``)."""
+    return resolve('jra55_dir', tier_hint='Tier 1: p_atm uncertainty fields')
+
+
+def jra3q_dir():
+    """JRA-3Q forcing archive."""
+    return resolve('jra3q_dir', tier_hint='Tier 1: p_atm reanalysis spread')
+
+
+def era5_dir():
+    """ERA5 forcing archive."""
+    return resolve('era5_dir', tier_hint='Tier 1: p_atm reanalysis spread')
+
+
 def basin_dir():
     """The basin-mask input directory (``utils``'s latitude/basin helpers)."""
     return resolve('basin_dir', tier_hint='Tier 1/2: basin-restricted gateway masks')

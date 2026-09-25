@@ -47,7 +47,7 @@ Two departures from the notebook, both deliberate
 -------------------------------------------------
 * **The nature run stops on 2012-11-15, so November is dropped by default.**
   ``phibot_daily`` covers 2011-09-13 to 2012-11-15, while the FM writes 367
-  daily records (2012-01-01 .. 2013-01-01). A plain ``resample('1M')`` on each
+  daily records (2012-01-01 .. 2013-01-01). A plain ``resample('1ME')`` on each
   side therefore builds a November NR mean from 15 days and a November FM mean
   from 30, and compares them as if they were the same quantity -- which is what
   the notebook did. `complete_months_only=True` (the default here) keeps only
@@ -202,11 +202,11 @@ def load_bpmon_anom(run_dir, iternums=ITERNUMS_GRACE, datetimes=None):
     record axis to ``time``, convert to an equivalent-water-height anomaly in cm.
 
     `datetimes` are the month labels; if None they are taken as the month ENDS
-    of `YEAR`, matching what ``resample(time='1M')`` produces on the cable side
+    of `YEAR`, matching what ``resample(time='1ME')`` produces on the cable side
     so the two are directly comparable.
     """
     if datetimes is None:
-        datetimes = pd.date_range(start=f'{YEAR}-01-01', periods=12, freq='M')
+        datetimes = pd.date_range(start=f'{YEAR}-01-01', periods=12, freq='ME')
     das = []
     for it in iternums:
         fname = f'{run_dir.rstrip("/")}/iter{it:04d}/m_bpmon.{it:010d}.data'
@@ -258,12 +258,12 @@ def nr_monthly(nr, datetimes, complete_months_only=True, min_days=28):
     daily = (nr.fld_full
              .sel(time=slice(datetimes[0], datetimes[-1]))
              .resample(time='1D').mean())
-    nr_mo = daily.resample(time='1M').mean('time').compute()
+    nr_mo = daily.resample(time='1ME').mean('time').compute()
 
     # Count on a single column: the NR has no per-cell time gaps, only the
     # domain-wide truncation at 2012-11-15.
     ndays = (daily.isel(tile=0, j=0, i=0).notnull()
-             .resample(time='1M').sum().compute())
+             .resample(time='1ME').sum().compute())
     ndays = xr.DataArray(np.asarray(ndays.values), dims='time',
                          coords={'time': nr_mo.time})
 
@@ -294,7 +294,7 @@ def compute_cable_skill(run_dir=RUN_DIR_CABLE, iternums=ITERNUMS_CABLE, nr=None,
 
     nr_mo, _ = nr_monthly(nr, datetimes, complete_months_only=complete_months_only)
     fm_mo = (load_bp_anom(run_dir, iternums=iternums, datetimes=datetimes)
-             .resample(time='1M').mean('time').compute())
+             .resample(time='1ME').mean('time').compute())
     return _compute_skill(fm_mo.sel(time=nr_mo.time), nr_mo)
 
 
@@ -323,7 +323,7 @@ def compute_grace_skill(run_dir=GRACE_RUN_DIR, iternums=ITERNUMS_GRACE, nr=None,
     # m_bpmon's records are month means in FM order; label them with the FULL
     # month-end calendar, then select the NR's months -- so dropping the NR's
     # partial month drops the same month here rather than shifting the labels.
-    all_months = pd.date_range(start=datetimes[0], end=datetimes[-1], freq='M')
+    all_months = pd.date_range(start=datetimes[0], end=datetimes[-1], freq='ME')
     fm_mo = load_bpmon_anom(run_dir, iternums=iternums, datetimes=all_months)
     return _compute_skill(fm_mo.sel(time=nr_mo.time), nr_mo)
 
