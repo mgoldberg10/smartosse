@@ -20,17 +20,18 @@ sites:
     detect:
       hostname: ["pfe*", "r*i*n*"]
     run_root: /nobackupp27/mgoldbe1/aste_270x450x180/osses
-    # Best-effort guess, NOT verified against a job script this session --
-    # the kept model/jobs/ scripts actually symlink raw *.mitgrid tiles from
-    # an external run_template (/nobackupp17/atnguye4/llc270/aste_270x450x180/
-    # run_template/input_binaries/), not a pre-processed GRID_* directory, so
-    # this may not be the right equivalent of TACC's GRID_noblank_real4/.
-    # Two processed-grid candidates exist on pfe: GRID_froman/ (matches the
-    # active code_froman experiment family -- picked for that reason) and
-    # GRID_noblank/ (unclear how it differs; roughly half the file size of
-    # GRID_froman/'s AngleCS.data, so possibly a real4-vs-real8 or
-    # tile-count difference, not just a rename). Confirm which before
-    # depending on this for anything that must match the paper's runs.
+    # CONFIRMED, 2026-09-24: opened via smartosse.dataset.open_astedataset +
+    # smartosse.llc_grid.get_llc_grid against this exact path and got the
+    # expected 270x270x50x6-tile ASTE dims and a valid xgcm.Grid -- this was
+    # a guess when first written (picked because it matches the active
+    # code_froman family), now it's verified. GRID_noblank/ (the other
+    # candidate, roughly half GRID_froman/'s AngleCS.data size) was never
+    # tried; no reason to now that this one is known to work. Note the kept
+    # model/jobs/ scripts don't actually use this -- they symlink raw
+    # *.mitgrid tiles from an external run_template
+    # (/nobackupp17/atnguye4/llc270/aste_270x450x180/run_template/
+    # input_binaries/) instead, so this is the smartosse-analysis-side grid
+    # source, not necessarily what a from-scratch run would use.
     grid_dir: /nobackupp27/mgoldbe1/aste_270x450x180/GRID_froman
     # Not established -- pfe-side extraction (gen_*.py) hasn't been run yet
     # (ROADMAP §4b), so there's no cache_dir convention here yet. Falls back

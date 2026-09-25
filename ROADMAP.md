@@ -15,6 +15,59 @@ These two goals conflict less than they appear. The thing that satisfies both is
 
 ---
 
+## Handoff, 2026-09-24 (pfe session) — start here
+
+**Uncommitted state:** local branch `figures-pfe-portability` on pfe (`pfe20`,
+`/nobackupp27/mgoldbe1/smartosse`), 2 commits ahead of `main`, **not pushed**. Contains a
+namelist-rescue correction and the first real pfe-portability + xgcm-compat fixes (see
+below). Push it, open a PR, merge, then `git pull` on whatever machine picks this up next
+— same flow as the two PRs already merged this session (`pfe-environment-extract`,
+`packaging-paths`).
+
+**Matt's stated bar for "the package is ready"**: load real data and regenerate a figure
+cache *on pfe*, using only what's in this repo. First real attempt this session
+(`python -m smartosse.figures.gen_gate_caches jraspread`) got substantially further than
+expected — real grid load, real 3D binary I/O, one full iteration's computation — before
+being **OOM-killed by the pfe login node's memory cgroup** partway through the second
+iteration (confirmed via `dmesg`, not a guess). That is not a code bug; it is that this
+workload needs a real compute-node allocation, same as every script in `model/jobs/`
+already requests via PBS. **The concrete next step is re-running that same command through
+an actual PBS job or interactive allocation** (`qsub -I ...`, then `export
+PATH=/home3/mgoldbe1/envs/extract/bin:$PATH` and rerun) rather than on a login node. Not
+done this session on purpose — submitting a job spends real queue allocation, so it wasn't
+done unprompted.
+
+**Other loose ends found this session, not yet acted on:**
+
+- Two more `gen_*.py` cache builders still hardcode TACC-only paths that were out of scope
+  for this pass: `gen_patm_uncertainty_fields.py` (`JRA55_DIR`, `JRA3Q_DIR`, `ERA5_DIR` —
+  raw atmospheric reanalysis archives, not model run output, no known pfe location yet) and
+  `gen_patm_daytoday_weight_Pa.py` (`WEIGHT_DIR`). `gen_appendixB_skill_cache.py`'s
+  `NR_BT_DIR` (nature run) is the same story. None of these block `gen_gate_caches.py`.
+- Swept the rest of the repo for the same xgcm `boundary=`/`periodic=` API drift that hit
+  `gen_gate_caches.py` (fixed in `smartosse/llc_grid.py`, `smartosse/osse.py`,
+  `smartosse/figures/gen_gate_caches.py` — xgcm's `Grid(periodic=...)` was removed and
+  `.interp(boundary=...)` renamed to `padding=` somewhere between whatever xgcm version this
+  repo was written against and 0.10.1, the version `environment-extract.yml` installs).
+  Found no other xgcm-specific call sites; the three `.interp(...)` hits elsewhere
+  (`fig10_patm_mechanism.py`, `gen_patm_uncertainty_fields.py`) are plain `xarray.interp`,
+  unaffected. Worth a similar live-run check on the *other* five `gen_*.py`/`osse.py` paths
+  before assuming they're all clean, though — this was only found by actually running one.
+- `config/sites.yml`'s `pfe` site's `grid_dir` (`GRID_froman/`) was a flagged-uncertain guess
+  as of last session; now confirmed correct by the smoke test above (updated the comment in
+  place). The `run_root`/`cache_dir` entries for `pfe` remain as documented.
+
+**Where this leaves the roadmap's "Suggested order" below**: §5b, §4b, §1 (partially), §3,
+§4 are done (see their sections for what "partially" means for §1). §5c and the rest of §1
+need a **TACC session**, not pfe — most of the ~55 untracked per-figure modules, the stray
+PNGs, and the untracked core modules (`curl.py`, `plot_new.py`, etc.) only exist there
+(verified absent on pfe, twice now, across two sessions). §5 (figure manifest + driver) was
+recommended as next-after-§4 but not started; it doesn't strictly need §5c first and could
+reasonably be done from pfe against the current (partial) figure set if a TACC session isn't
+available. Nature-run/llc4320: still deferred, needs Matt's manual intervention.
+
+---
+
 ## 0. The framing decision (do this first — everything else follows from it)
 
 The honest problem: full reproduction needs ASTE + its inputs, the run directories, and a
